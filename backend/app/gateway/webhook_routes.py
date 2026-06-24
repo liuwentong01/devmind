@@ -64,3 +64,32 @@ async def github_webhook(
     job = await queue.enqueue_job("review_pull_task", owner, repo_name, number)
     logger.info("webhook_enqueued", owner=owner, repo=repo_name, number=number)
     return {"status": "queued", "job_id": job.job_id if job else None}
+
+
+@router.post("/alert", status_code=202)
+async def alert_webhook(request: Request) -> dict:
+    """接收监控告警（Alertmanager 格式），对每条 firing 告警入队根因分析。"""
+    payload = await request.json()
+    alerts = payload.get("alerts") or [payload]  # 兼容非 Alertmanager 的单条告警
+
+    queue = await get_queue()
+    queued = 0
+    for raw in alerts:
+        if raw.get("status") == "resolved":
+            continue
+        labels = raw.get("labels", {})
+        annotations = raw.get("annotations", {})
+        alert = {
+            "alertname": labels.get("alertname") or raw.get("alertname", "未知告警"),
+            "service": labels.get("service") or labels.get("job", ""),
+            "severity": labels.get("severity", "warning"),
+            "description": annotations.get("description")
+            or annotations.get("summary")
+            or raw.get("description", ""),
+            "starts_at": raw.get("startsAt", ""),
+        }
+        await queue.enqueue_job("analyze_alert_task", alert)
+        queued += 1
+
+    logger.info("alert_webhook_enqueued", count=queued)
+    return {"status": "queued", "count": queued}

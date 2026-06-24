@@ -41,6 +41,14 @@ class Settings(BaseSettings):
     review_rule_source: str = "review-rule"  # 团队审查规范在知识库中的来源标识
     review_top_k: int = 4
 
+    # 告警根因 Agent（P3，AIOps）
+    prometheus_url: str = ""  # 留空则用 mock 指标
+    loki_url: str = ""  # 留空则用 mock 日志
+    deploy_repo: str = ""  # "owner/repo"，用于拉取近期发布 commit；留空则用 mock
+    im_webhook_url: str = ""  # 飞书/Slack 群机器人 webhook，留空则只记日志
+    rca_max_iterations: int = 2  # 假设验证循环最大轮数
+    rca_confidence_threshold: float = 0.75  # 置信度达标即收敛
+
     # 数据库 / 缓存（P0 预留）
     database_url: str = "postgresql+psycopg://devmind:devmind@localhost:5432/devmind"
     redis_url: str = "redis://localhost:6379/0"

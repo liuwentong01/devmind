@@ -120,3 +120,34 @@ curl -X POST http://localhost:8000/api/review/trigger \
 | POST | `/api/webhooks/github` | GitHub PR Webhook 接收器（验签 → 入队） |
 
 > Webhook / trigger 需要：Redis 运行中 + 启动 `arq` worker + `.env` 配 `GITHUB_TOKEN`（回写 PR）。
+
+## P3 告警根因（AIOps：并行编排 + 假设验证循环）
+
+未配置 Prometheus/Loki/DEPLOY_REPO 时用 mock 数据，可直接跑通：
+
+```bash
+# 手动流式根因分析（SSE：step 进度 + 报告 token）
+curl -N -X POST http://localhost:8000/api/incident/analyze/stream \
+  -H "Content-Type: application/json" \
+  -d '{"alertname":"HighMemoryUsage","service":"order-service","severity":"critical","description":"内存超 95%，5xx 飙升"}'
+
+# 监控告警 Webhook（Alertmanager 格式）→ 入队 → worker 分析并推 IM
+curl -X POST http://localhost:8000/api/webhooks/alert \
+  -H "Content-Type: application/json" \
+  -d '{"alerts":[{"status":"firing","labels":{"alertname":"HighMemoryUsage","service":"order-service","severity":"critical"},"annotations":{"description":"内存超 95%"}}]}'
+```
+
+### 告警根因接口
+
+| 方法 | 路径 | 说明 |
+|---|---|---|
+| POST | `/api/incident/analyze/stream` | 手动流式根因分析（SSE） |
+| POST | `/api/webhooks/alert` | 告警 Webhook（Alertmanager 格式）→ 入队 |
+
+## 统一异步 worker
+
+P2 / P3 的异步任务由同一个 worker 处理：
+
+```bash
+arq app.workers.worker.WorkerSettings
+```

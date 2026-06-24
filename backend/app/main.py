@@ -8,6 +8,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from app.core.config import get_settings
 from app.core.db import init_db
 from app.core.logging import get_logger, setup_logging
+from app.gateway.incident_routes import router as incident_router
 from app.gateway.knowledge_routes import router as knowledge_router
 from app.gateway.review_routes import router as review_router
 from app.gateway.routes import router
@@ -60,6 +61,7 @@ def create_app() -> FastAPI:
     app.include_router(router, prefix="/api")
     app.include_router(knowledge_router, prefix="/api")
     app.include_router(review_router, prefix="/api")
+    app.include_router(incident_router, prefix="/api")
     app.include_router(webhook_router, prefix="/api")
     return app
 

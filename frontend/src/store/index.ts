@@ -1,5 +1,6 @@
 import { configureStore } from '@reduxjs/toolkit';
 import chatReducer from './chatSlice';
+import incidentReducer from './incidentSlice';
 import knowledgeReducer from './knowledgeSlice';
 import reviewReducer from './reviewSlice';
 
@@ -9,6 +10,7 @@ export const store = configureStore({
     chat: chatReducer,
     knowledge: knowledgeReducer,
     review: reviewReducer,
+    incident: incidentReducer,
   },
 });
 

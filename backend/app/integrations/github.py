@@ -34,6 +34,26 @@ class GitHubClient:
             resp.raise_for_status()
             return resp.text
 
+    async def list_recent_commits(self, owner: str, repo: str, limit: int = 10) -> list[dict]:
+        """获取仓库默认分支最近若干次提交（用于关联近期发布）。"""
+        url = f"{self._base}/repos/{owner}/{repo}/commits"
+        async with httpx.AsyncClient(timeout=30) as client:
+            resp = await client.get(url, headers=self._headers(), params={"per_page": limit})
+            resp.raise_for_status()
+            data = resp.json()
+        commits = []
+        for item in data:
+            commit = item.get("commit", {})
+            commits.append(
+                {
+                    "sha": (item.get("sha") or "")[:7],
+                    "message": (commit.get("message") or "").splitlines()[0],
+                    "author": commit.get("author", {}).get("name", ""),
+                    "date": commit.get("author", {}).get("date", ""),
+                }
+            )
+        return commits
+
     async def post_review(self, owner: str, repo: str, number: int, body: str) -> None:
         """以一条整体 Review 评论的形式回写到 PR。"""
         url = f"{self._base}/repos/{owner}/{repo}/pulls/{number}/reviews"

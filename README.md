@@ -9,17 +9,18 @@ AI 原生的内部研发效能平台。5 个垂直 Agent（代码审查 / 告警
 - **P0 内核**：FastAPI + LiteLLM(国内模型) + LangGraph 最小 ReAct Agent + SSE 流式 + React(AntD + Redux Toolkit) 控制台 ✅
 - **P1 知识答疑 Agent**：pgvector RAG 全链路（入库分块→向量化→检索→带引用流式回答），自定义 LangGraph 工作流（retrieve→generate）✅
 - **P2 代码审查 Agent**：GitHub Webhook（验签）+ ARQ 异步队列 + worker 拉 diff/检索团队规范/LLM 审查/回写 PR；另有手动 SSE 流式审查供 UI 体验 ✅
+- **P3 告警根因 Agent**：监控告警 Webhook + 多系统**并行**拉取（日志/指标/发布）+ **假设验证循环**（迭代收敛）+ 推送 IM；AIOps 方向 ✅
 
 ```
 ai-knowledge-agent/
 ├── backend/
 │   └── app/
 │       ├── kernel/           # 共享内核：llm 网关 / tools / orchestrator / rag / queue
-│       ├── agents/           # 垂直 Agent：knowledge_qa(P1) / code_review(P2)
-│       ├── integrations/     # GitHub 客户端 (P2)
-│       ├── workers/          # ARQ worker：review_worker (P2)
+│       ├── agents/           # 垂直 Agent：knowledge_qa(P1) / code_review(P2) / incident_rca(P3)
+│       ├── integrations/     # GitHub(P2) / monitoring + logs + notifier(P3)
+│       ├── workers/          # ARQ worker：review_worker(P2) / rca_worker(P3) / worker(聚合)
 │       ├── models/           # Document / Chunk (pgvector)
-│       └── gateway/          # routes(P0) / knowledge(P1) / review+webhook(P2)
+│       └── gateway/          # routes(P0) / knowledge(P1) / review(P2) / incident(P3) / webhook
 ├── frontend/                 # React 18 + TS + Vite + AntD + Redux Toolkit
 ├── deploy/                   # docker-compose（PG/pgvector + Redis + Langfuse）
 └── docs/                     # 技术方案
@@ -104,6 +105,24 @@ arq app.workers.review_worker.WorkerSettings
   Content-Type `application/json`，Secret 与 `.env` 的 `GITHUB_WEBHOOK_SECRET` 一致，事件选 Pull requests。
   本地可用 cloudflared / ngrok 把 8000 端口暴露到公网。
 
-## 下一步（P3）
+> 异步 worker 已聚合，统一用 `arq app.workers.worker.WorkerSettings` 启动（同时处理 P2 审查与 P3 根因任务）。
 
-告警根因 Agent：监控告警 Webhook + 多系统并行编排 + 假设验证循环（AIOps）。
+## 告警根因链路说明（P3，AIOps）
+
+```
+并行：START ─┬─ 拉日志(Loki/mock) ─┐
+            ├─ 拉指标(Prometheus/mock) ┼─→ analyze(生成假设) ─→ verify(验证)
+            └─ 拉发布(GitHub commits/mock) ┘                       │
+                                          ┌──置信度<阈值且未超迭代──┘
+                                          └─→ 回 analyze 重新分析
+            置信度达标 / 达迭代上限 ─→ conclude(根因报告) ─→ END
+```
+
+- **多系统并行编排**：`graph.py` 中 START 扇出 3 个 fetch 节点（写不同 state 键，无冲突），全部完成才汇聚到 analyze。
+- **假设验证循环**：`add_conditional_edges("verify", route, ["analyze","conclude"])` 实现回炉，受 `RCA_MAX_ITERATIONS` / `RCA_CONFIDENCE_THRESHOLD` 控制。
+- **无监控也能跑**：未配 `PROMETHEUS_URL` / `LOKI_URL` / `DEPLOY_REPO` 时各自用 mock 数据，UI 上完整体验。
+- 体验：到「告警根因 (P3)」页用预置示例（HighMemoryUsage）点「开始根因分析」，看并行步骤 + 流式根因报告。
+
+## 下一步（P5）
+
+代码理解 Agent：AST 解析 + Neo4j 代码图谱 + 分层摘要 + 改动影响分析。
