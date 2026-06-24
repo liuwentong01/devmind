@@ -6,7 +6,7 @@ P0 只暴露「按模型名拿到一个可用于 LangGraph 的 Chat 模型」的
 
 from functools import lru_cache
 
-from langchain_community.chat_models import ChatLiteLLM
+from langchain_litellm import ChatLiteLLM
 
 from app.core.config import get_settings
 from app.core.logging import get_logger
