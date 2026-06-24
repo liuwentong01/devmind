@@ -8,12 +8,15 @@ from fastapi.middleware.cors import CORSMiddleware
 from app.core.config import get_settings
 from app.core.db import init_db
 from app.core.logging import get_logger, setup_logging
+from app.gateway.admin_routes import router as admin_router
 from app.gateway.codebase_routes import router as codebase_router
 from app.gateway.incident_routes import router as incident_router
 from app.gateway.knowledge_routes import router as knowledge_router
+from app.gateway.requirement_routes import router as requirement_router
 from app.gateway.review_routes import router as review_router
 from app.gateway.routes import router
 from app.gateway.webhook_routes import router as webhook_router
+from app.kernel.cost import install_cost_tracking
 from app.kernel.graph.store import close_graph
 from app.kernel.queue import close_queue
 
@@ -24,6 +27,7 @@ async def lifespan(app: FastAPI):
     setup_logging()
     settings = get_settings()
     logger = get_logger("main")
+    install_cost_tracking()
     # 初始化数据库（启用 pgvector 扩展 + 建表）；失败不阻断启动，便于纯 P0 场景调试
     try:
         await init_db()
@@ -66,6 +70,8 @@ def create_app() -> FastAPI:
     app.include_router(review_router, prefix="/api")
     app.include_router(incident_router, prefix="/api")
     app.include_router(codebase_router, prefix="/api")
+    app.include_router(requirement_router, prefix="/api")
+    app.include_router(admin_router, prefix="/api")
     app.include_router(webhook_router, prefix="/api")
     return app
 

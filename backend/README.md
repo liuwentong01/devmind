@@ -183,3 +183,41 @@ curl -X POST http://localhost:8000/api/codebase/impact \
 
 > Neo4j Browser: <http://localhost:7474>（账号 neo4j / 密码见 `.env` 的 `NEO4J_PASSWORD`），
 > 可视化查看代码图谱：`MATCH (f:Function {repo:"devmind"})-[:CALLS]->(g) RETURN f,g LIMIT 100`。
+
+## P4 需求拆解（HITL 人工闸门）
+
+无 Atlassian 配置时 Jira 写入走 dry-run，可直接体验 HITL：
+
+```bash
+# 1. 拆解（暂停态，返回 thread_id + 提议任务，未写库）
+curl -X POST http://localhost:8000/api/requirement/plan \
+  -H "Content-Type: application/json" \
+  -d '{"prd_text":"用户可用积分兑换商品；运营后台配置商品；兑换记录可导出","project":"DEV"}'
+
+# 2. 人工确认（用上一步返回的 thread_id + 编辑后的 tasks）→ 写 Jira
+curl -X POST http://localhost:8000/api/requirement/confirm \
+  -H "Content-Type: application/json" \
+  -d '{"thread_id":"<上一步返回>","tasks":[{"title":"商品兑换接口","type":"backend","story_points":5}]}'
+```
+
+| 方法 | 路径 | 说明 |
+|---|---|---|
+| POST | `/api/requirement/plan` | 拆解 PRD → interrupt 暂停 → 返回提议 |
+| POST | `/api/requirement/confirm` | 人工确认后恢复 → 写 Jira |
+
+## P6 工程化
+
+```bash
+# 成本治理
+curl http://localhost:8000/api/admin/cost
+
+# 评测（需先在知识答疑入库请假制度示例文档）
+python -m app.eval.run_eval
+```
+
+| 方法 | 路径 | 说明 |
+|---|---|---|
+| GET | `/api/admin/cost` | LLM 用量与费用统计 |
+| POST | `/api/admin/cost/reset` | 重置计数 |
+
+部署见 `../deploy/k8s/README.md`。

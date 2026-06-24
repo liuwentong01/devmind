@@ -10,20 +10,27 @@ AI 原生的内部研发效能平台。5 个垂直 Agent（代码审查 / 告警
 - **P1 知识答疑 Agent**：pgvector RAG 全链路（入库分块→向量化→检索→带引用流式回答），自定义 LangGraph 工作流（retrieve→generate）✅
 - **P2 代码审查 Agent**：GitHub Webhook（验签）+ ARQ 异步队列 + worker 拉 diff/检索团队规范/LLM 审查/回写 PR；另有手动 SSE 流式审查供 UI 体验 ✅
 - **P3 告警根因 Agent**：监控告警 Webhook + 多系统**并行**拉取（日志/指标/发布）+ **假设验证循环**（迭代收敛）+ 推送 IM；AIOps 方向 ✅
+- **P4 需求拆解 Agent**：PRD/Confluence → LLM 拆任务 → **HITL 人工闸门**（LangGraph interrupt 暂停编辑）→ 写 Jira（未配置则 dry-run）✅
 - **P5 代码理解 Agent**：tree-sitter AST 解析 + Neo4j 代码图谱（File/Function/CALLS）+ 代码问答 + **改动影响分析**（反向调用遍历）✅
+- **P6 工程化**：成本治理（LiteLLM 回调统计 + 面板）+ Langfuse Eval（LLM-as-judge）+ Docker/K8s 部署 ✅
 
 ```
 ai-knowledge-agent/
 ├── backend/
+│   ├── Dockerfile            # API + worker 共用镜像
 │   └── app/
-│       ├── kernel/           # 共享内核：llm / tools / orchestrator / rag / queue / graph(Neo4j)
-│       ├── agents/           # knowledge_qa(P1) / code_review(P2) / incident_rca(P3) / code_understanding(P5)
-│       ├── integrations/     # GitHub(P2) / monitoring + logs + notifier(P3)
-│       ├── workers/          # ARQ worker：review_worker(P2) / rca_worker(P3) / worker(聚合)
+│       ├── kernel/           # 共享内核：llm / tools / orchestrator / rag / queue / graph / cost
+│       ├── agents/           # knowledge_qa(P1)/code_review(P2)/incident_rca(P3)/requirement(P4)/code_understanding(P5)
+│       ├── integrations/     # GitHub(P2)/monitoring+logs+notifier(P3)/confluence+jira(P4)
+│       ├── workers/          # ARQ worker：review(P2)/rca(P3)/worker(聚合)
+│       ├── eval/             # P6 评测：数据集 + LLM-as-judge + CLI runner
 │       ├── models/           # Document / Chunk (pgvector)
-│       └── gateway/          # routes(P0)/knowledge(P1)/review(P2)/incident(P3)/codebase(P5)/webhook
-├── frontend/                 # React 18 + TS + Vite + AntD + Redux Toolkit
-├── deploy/                   # docker-compose（PG/pgvector + Redis + Neo4j + Langfuse）
+│       └── gateway/          # 各 Agent 路由 + admin(成本) + webhook
+├── frontend/                 # React 18 + TS + Vite + AntD + Redux Toolkit（+ TanStack Query 用于成本面板）
+│   ├── Dockerfile + nginx.conf
+├── deploy/
+│   ├── docker-compose.yml    # PG/pgvector + Redis + Neo4j + Langfuse
+│   └── k8s/                  # P6：namespace/configmap/secret/backend/worker/frontend/ingress
 └── docs/                     # 技术方案
 ```
 
@@ -138,7 +145,24 @@ arq app.workers.review_worker.WorkerSettings
 - 体验：到「代码理解 (P5)」页填仓库名 + 本地路径（如本项目 `backend`）→「构建代码图谱」→ 切「代码问答 / 影响分析」。
   例：索引本项目后问「index_repo 做了什么」，或对 `retrieve` 做影响分析。
 
-## 平台进度
+## 需求拆解链路说明（P4，HITL）
 
-P0 内核 → P1 RAG → P2 事件驱动审查 → P3 AIOps 根因 → P5 代码图谱。
-（P4 需求拆解 Agent：Jira/Confluence 写入 + HITL，可作为后续扩展。）
+```
+plan：PRD/Confluence → LLM 拆任务 → human_review 节点 interrupt() 暂停（不写库）→ 返回提议 + thread_id
+（人工在 UI 编辑任务表）
+confirm：Command(resume=编辑后任务) + 同 thread_id → 恢复 → write_jira（未配 Atlassian 则 dry-run）
+```
+
+- HITL 核心：`backend/app/agents/requirement/graph.py` 用 `interrupt()` + `MemorySaver` checkpointer 实现「暂停—人工介入—恢复」。
+- 两阶段接口：`POST /api/requirement/plan`（暂停态）、`POST /api/requirement/confirm`（确认写入）。
+- 体验：到「需求拆解 (P4)」页用预置 PRD 点「拆解任务」→ 编辑任务表 → 「确认并写入 Jira」（无 Atlassian 配置时 dry-run）。
+
+## 工程化说明（P6）
+
+- **成本治理**：`backend/app/kernel/cost.py` 用 LiteLLM 成功回调累计 token/费用；`GET /api/admin/cost`；前端「成本治理 (P6)」页用 **TanStack Query** 轮询展示。
+- **Eval 评估**：`python -m app.eval.run_eval` 跑数据集 → 知识答疑 Agent → LLM-as-judge 打分 → 汇总（可选上报 Langfuse）。
+- **部署**：`backend/Dockerfile`、`frontend/Dockerfile`(+nginx)、`deploy/k8s/`（见该目录 README）。
+
+## 平台进度（全部完成）
+
+P0 内核 → P1 RAG → P2 事件驱动审查 → P3 AIOps 根因 → P4 HITL 需求拆解 → P5 代码图谱 → P6 工程化。

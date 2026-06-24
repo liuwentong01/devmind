@@ -55,6 +55,12 @@ class Settings(BaseSettings):
     neo4j_password: str = "devmind-neo4j"
     code_index_max_files: int = 800  # 单次索引文件数上限，防止超大仓库卡死
 
+    # 需求拆解 Agent（P4，Atlassian）
+    atlassian_base_url: str = ""  # 如 https://your.atlassian.net；留空则 Jira 走 dry-run
+    atlassian_email: str = ""
+    atlassian_api_token: str = ""
+    jira_default_project: str = ""  # Jira 项目 key，如 DEV
+
     # 数据库 / 缓存（P0 预留）
     database_url: str = "postgresql+psycopg://devmind:devmind@localhost:5432/devmind"
     redis_url: str = "redis://localhost:6379/0"

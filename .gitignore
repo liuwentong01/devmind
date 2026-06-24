@@ -10,6 +10,9 @@ venv/
 # 环境变量
 .env
 
+# K8s 真实密钥（仅提交 secret.example.yaml）
+deploy/k8s/secret.yaml
+
 # Node / 前端
 node_modules/
 dist/

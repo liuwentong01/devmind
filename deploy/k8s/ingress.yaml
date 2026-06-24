@@ -1,0 +1,22 @@
+# 入口：前端走 nginx（其内部反代 /api 到后端）
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: devmind-ingress
+  namespace: devmind
+  annotations:
+    nginx.ingress.kubernetes.io/proxy-buffering: "off"   # SSE 流式
+    nginx.ingress.kubernetes.io/proxy-read-timeout: "600"
+spec:
+  ingressClassName: nginx
+  rules:
+    - host: devmind.example.com
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: devmind-frontend
+                port:
+                  number: 80

@@ -3,6 +3,7 @@ import chatReducer from './chatSlice';
 import codebaseReducer from './codebaseSlice';
 import incidentReducer from './incidentSlice';
 import knowledgeReducer from './knowledgeSlice';
+import requirementReducer from './requirementSlice';
 import reviewReducer from './reviewSlice';
 
 // Redux Toolkit 全局 store（客户端状态）
@@ -13,6 +14,7 @@ export const store = configureStore({
     review: reviewReducer,
     incident: incidentReducer,
     codebase: codebaseReducer,
+    requirement: requirementReducer,
   },
 });
 

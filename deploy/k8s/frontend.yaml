@@ -1,0 +1,40 @@
+# 前端：Deployment + Service（nginx 托管 + 反代 /api 到后端）
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: devmind-frontend
+  namespace: devmind
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: devmind-frontend
+  template:
+    metadata:
+      labels:
+        app: devmind-frontend
+    spec:
+      containers:
+        - name: web
+          image: devmind/frontend:latest
+          ports:
+            - containerPort: 80
+          resources:
+            requests:
+              cpu: "50m"
+              memory: "64Mi"
+            limits:
+              cpu: "250m"
+              memory: "128Mi"
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: devmind-frontend
+  namespace: devmind
+spec:
+  selector:
+    app: devmind-frontend
+  ports:
+    - port: 80
+      targetPort: 80

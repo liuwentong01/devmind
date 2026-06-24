@@ -2,7 +2,9 @@ import { Layout, Menu, Typography } from 'antd';
 import {
   ApartmentOutlined,
   CodeOutlined,
+  DollarOutlined,
   MessageOutlined,
+  ProfileOutlined,
   ReadOutlined,
   RobotOutlined,
   ThunderboltOutlined,
@@ -10,8 +12,10 @@ import {
 import { Navigate, Route, Routes, useLocation, useNavigate } from 'react-router-dom';
 import ChatPage from './pages/ChatPage';
 import CodebasePage from './pages/CodebasePage';
+import CostPage from './pages/CostPage';
 import IncidentPage from './pages/IncidentPage';
 import KnowledgePage from './pages/KnowledgePage';
+import RequirementPage from './pages/RequirementPage';
 import ReviewPage from './pages/ReviewPage';
 
 const { Header, Sider, Content } = Layout;
@@ -20,7 +24,9 @@ const MENU_ITEMS = [
   { key: '/knowledge', icon: <ReadOutlined />, label: '知识答疑 (P1)' },
   { key: '/review', icon: <CodeOutlined />, label: '代码审查 (P2)' },
   { key: '/incident', icon: <ThunderboltOutlined />, label: '告警根因 (P3)' },
+  { key: '/requirement', icon: <ProfileOutlined />, label: '需求拆解 (P4)' },
   { key: '/codebase', icon: <ApartmentOutlined />, label: '代码理解 (P5)' },
+  { key: '/cost', icon: <DollarOutlined />, label: '成本治理 (P6)' },
   { key: '/chat', icon: <MessageOutlined />, label: '通用对话 (P0)' },
 ];
 
@@ -53,7 +59,9 @@ export default function App() {
               <Route path="/knowledge" element={<KnowledgePage />} />
               <Route path="/review" element={<ReviewPage />} />
               <Route path="/incident" element={<IncidentPage />} />
+              <Route path="/requirement" element={<RequirementPage />} />
               <Route path="/codebase" element={<CodebasePage />} />
+              <Route path="/cost" element={<CostPage />} />
               <Route path="/chat" element={<ChatPage />} />
             </Routes>
           </div>

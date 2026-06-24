@@ -1,0 +1,32 @@
+# ARQ 异步 worker：与后端同镜像，覆盖启动命令（无对外 Service）
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: devmind-worker
+  namespace: devmind
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: devmind-worker
+  template:
+    metadata:
+      labels:
+        app: devmind-worker
+    spec:
+      containers:
+        - name: worker
+          image: devmind/backend:latest
+          command: ["arq", "app.workers.worker.WorkerSettings"]
+          envFrom:
+            - configMapRef:
+                name: devmind-config
+            - secretRef:
+                name: devmind-secret
+          resources:
+            requests:
+              cpu: "250m"
+              memory: "512Mi"
+            limits:
+              cpu: "1"
+              memory: "1Gi"
