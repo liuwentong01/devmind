@@ -27,7 +27,7 @@ import {
 } from '../store/requirementSlice';
 import { confirmRequirement, planRequirement, type TaskItem } from '../api/requirement';
 
-const { Paragraph, Text } = Typography;
+const { Text } = Typography;
 
 const SAMPLE_PRD = `需求：用户积分商城
 1. 用户可浏览可兑换商品列表（分页、按积分排序）

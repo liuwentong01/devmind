@@ -22,8 +22,11 @@ async def embed_texts(texts: list[str]) -> list[list[float]]:
 
     settings = get_settings()
     resp = await litellm.aembedding(model=settings.embedding_model, input=texts)
-    # litellm 返回结构兼容 OpenAI：resp["data"][i]["embedding"]
-    vectors = [item["embedding"] for item in resp["data"]]
+    # litellm 返回结构兼容 OpenAI：优先用 .data 属性，回退到下标；item 可能是 dict 或对象
+    data = getattr(resp, "data", None)
+    if data is None:
+        data = resp["data"]
+    vectors = [item["embedding"] if isinstance(item, dict) else item.embedding for item in data]
     logger.info("embed_done", count=len(vectors), dim=len(vectors[0]) if vectors else 0)
     return vectors
 
