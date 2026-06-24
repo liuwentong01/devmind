@@ -49,6 +49,12 @@ class Settings(BaseSettings):
     rca_max_iterations: int = 2  # 假设验证循环最大轮数
     rca_confidence_threshold: float = 0.75  # 置信度达标即收敛
 
+    # 代码理解 Agent（P5）
+    neo4j_uri: str = "bolt://localhost:7687"
+    neo4j_user: str = "neo4j"
+    neo4j_password: str = "devmind-neo4j"
+    code_index_max_files: int = 800  # 单次索引文件数上限，防止超大仓库卡死
+
     # 数据库 / 缓存（P0 预留）
     database_url: str = "postgresql+psycopg://devmind:devmind@localhost:5432/devmind"
     redis_url: str = "redis://localhost:6379/0"

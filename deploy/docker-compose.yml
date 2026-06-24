@@ -30,6 +30,19 @@ services:
     volumes:
       - devmind_redis:/data
 
+  # ===== Neo4j 代码图谱（P5）=====
+  neo4j:
+    image: neo4j:5
+    container_name: devmind-neo4j
+    environment:
+      NEO4J_AUTH: neo4j/devmind-neo4j
+      NEO4J_PLUGINS: '["apoc"]'
+    ports:
+      - "7474:7474"   # Browser UI
+      - "7687:7687"   # Bolt
+    volumes:
+      - devmind_neo4j:/data
+
   # ===== Langfuse 可观测（可选，按需启用）=====
   # Langfuse 自带独立 postgres，避免与业务库混用
   langfuse-db:
@@ -59,4 +72,5 @@ services:
 volumes:
   devmind_pg:
   devmind_redis:
+  devmind_neo4j:
   devmind_langfuse_pg:

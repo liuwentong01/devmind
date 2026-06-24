@@ -151,3 +151,35 @@ P2 / P3 的异步任务由同一个 worker 处理：
 ```bash
 arq app.workers.worker.WorkerSettings
 ```
+
+## P5 代码理解（tree-sitter + Neo4j 代码图谱）
+
+前置：起 Neo4j（compose 已含），`.env` 配 `NEO4J_*`。
+
+```bash
+# 1. 索引一个本地仓库（构建代码图谱）
+curl -X POST http://localhost:8000/api/codebase/index \
+  -H "Content-Type: application/json" \
+  -d '{"repo":"devmind","path":"/Users/liuwentong/Code/ai-knowledge-agent/backend"}'
+
+# 2. 代码问答（SSE：先回相关文件，再流式回答）
+curl -N -X POST http://localhost:8000/api/codebase/query/stream \
+  -H "Content-Type: application/json" \
+  -d '{"repo":"devmind","question":"index_repo 这个函数做了什么？"}'
+
+# 3. 改动影响分析（反向调用遍历）
+curl -X POST http://localhost:8000/api/codebase/impact \
+  -H "Content-Type: application/json" \
+  -d '{"repo":"devmind","function":"retrieve","depth":3}'
+```
+
+### 代码理解接口
+
+| 方法 | 路径 | 说明 |
+|---|---|---|
+| POST | `/api/codebase/index` | 索引本地仓库，构建 Neo4j 代码图谱 |
+| POST | `/api/codebase/query/stream` | 代码库问答（SSE） |
+| POST | `/api/codebase/impact` | 改动影响分析（调用者 + 被调用者 + 总结） |
+
+> Neo4j Browser: <http://localhost:7474>（账号 neo4j / 密码见 `.env` 的 `NEO4J_PASSWORD`），
+> 可视化查看代码图谱：`MATCH (f:Function {repo:"devmind"})-[:CALLS]->(g) RETURN f,g LIMIT 100`。

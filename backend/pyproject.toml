@@ -25,6 +25,10 @@ dependencies = [
     "pgvector>=0.3.5",
     # 异步任务队列 (P2 事件驱动)
     "arq>=0.26.0",
+    # 代码理解 (P5：AST 解析 + 图数据库)
+    "tree-sitter>=0.23.0",
+    "tree-sitter-language-pack>=0.3.0",
+    "neo4j>=5.25.0",
     # 可观测
     "langfuse>=2.53.0",
 ]

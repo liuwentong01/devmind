@@ -1,5 +1,6 @@
 import { configureStore } from '@reduxjs/toolkit';
 import chatReducer from './chatSlice';
+import codebaseReducer from './codebaseSlice';
 import incidentReducer from './incidentSlice';
 import knowledgeReducer from './knowledgeSlice';
 import reviewReducer from './reviewSlice';
@@ -11,6 +12,7 @@ export const store = configureStore({
     knowledge: knowledgeReducer,
     review: reviewReducer,
     incident: incidentReducer,
+    codebase: codebaseReducer,
   },
 });
 

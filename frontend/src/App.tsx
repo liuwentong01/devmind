@@ -1,5 +1,6 @@
 import { Layout, Menu, Typography } from 'antd';
 import {
+  ApartmentOutlined,
   CodeOutlined,
   MessageOutlined,
   ReadOutlined,
@@ -8,6 +9,7 @@ import {
 } from '@ant-design/icons';
 import { Navigate, Route, Routes, useLocation, useNavigate } from 'react-router-dom';
 import ChatPage from './pages/ChatPage';
+import CodebasePage from './pages/CodebasePage';
 import IncidentPage from './pages/IncidentPage';
 import KnowledgePage from './pages/KnowledgePage';
 import ReviewPage from './pages/ReviewPage';
@@ -18,6 +20,7 @@ const MENU_ITEMS = [
   { key: '/knowledge', icon: <ReadOutlined />, label: '知识答疑 (P1)' },
   { key: '/review', icon: <CodeOutlined />, label: '代码审查 (P2)' },
   { key: '/incident', icon: <ThunderboltOutlined />, label: '告警根因 (P3)' },
+  { key: '/codebase', icon: <ApartmentOutlined />, label: '代码理解 (P5)' },
   { key: '/chat', icon: <MessageOutlined />, label: '通用对话 (P0)' },
 ];
 
@@ -50,6 +53,7 @@ export default function App() {
               <Route path="/knowledge" element={<KnowledgePage />} />
               <Route path="/review" element={<ReviewPage />} />
               <Route path="/incident" element={<IncidentPage />} />
+              <Route path="/codebase" element={<CodebasePage />} />
               <Route path="/chat" element={<ChatPage />} />
             </Routes>
           </div>

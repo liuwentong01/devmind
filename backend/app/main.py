@@ -8,11 +8,13 @@ from fastapi.middleware.cors import CORSMiddleware
 from app.core.config import get_settings
 from app.core.db import init_db
 from app.core.logging import get_logger, setup_logging
+from app.gateway.codebase_routes import router as codebase_router
 from app.gateway.incident_routes import router as incident_router
 from app.gateway.knowledge_routes import router as knowledge_router
 from app.gateway.review_routes import router as review_router
 from app.gateway.routes import router
 from app.gateway.webhook_routes import router as webhook_router
+from app.kernel.graph.store import close_graph
 from app.kernel.queue import close_queue
 
 
@@ -37,6 +39,7 @@ async def lifespan(app: FastAPI):
     )
     yield
     await close_queue()
+    await close_graph()
     logger.info("app_stop")
 
 
@@ -62,6 +65,7 @@ def create_app() -> FastAPI:
     app.include_router(knowledge_router, prefix="/api")
     app.include_router(review_router, prefix="/api")
     app.include_router(incident_router, prefix="/api")
+    app.include_router(codebase_router, prefix="/api")
     app.include_router(webhook_router, prefix="/api")
     return app
 

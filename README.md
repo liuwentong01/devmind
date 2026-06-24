@@ -10,19 +10,20 @@ AI 原生的内部研发效能平台。5 个垂直 Agent（代码审查 / 告警
 - **P1 知识答疑 Agent**：pgvector RAG 全链路（入库分块→向量化→检索→带引用流式回答），自定义 LangGraph 工作流（retrieve→generate）✅
 - **P2 代码审查 Agent**：GitHub Webhook（验签）+ ARQ 异步队列 + worker 拉 diff/检索团队规范/LLM 审查/回写 PR；另有手动 SSE 流式审查供 UI 体验 ✅
 - **P3 告警根因 Agent**：监控告警 Webhook + 多系统**并行**拉取（日志/指标/发布）+ **假设验证循环**（迭代收敛）+ 推送 IM；AIOps 方向 ✅
+- **P5 代码理解 Agent**：tree-sitter AST 解析 + Neo4j 代码图谱（File/Function/CALLS）+ 代码问答 + **改动影响分析**（反向调用遍历）✅
 
 ```
 ai-knowledge-agent/
 ├── backend/
 │   └── app/
-│       ├── kernel/           # 共享内核：llm 网关 / tools / orchestrator / rag / queue
-│       ├── agents/           # 垂直 Agent：knowledge_qa(P1) / code_review(P2) / incident_rca(P3)
+│       ├── kernel/           # 共享内核：llm / tools / orchestrator / rag / queue / graph(Neo4j)
+│       ├── agents/           # knowledge_qa(P1) / code_review(P2) / incident_rca(P3) / code_understanding(P5)
 │       ├── integrations/     # GitHub(P2) / monitoring + logs + notifier(P3)
 │       ├── workers/          # ARQ worker：review_worker(P2) / rca_worker(P3) / worker(聚合)
 │       ├── models/           # Document / Chunk (pgvector)
-│       └── gateway/          # routes(P0) / knowledge(P1) / review(P2) / incident(P3) / webhook
+│       └── gateway/          # routes(P0)/knowledge(P1)/review(P2)/incident(P3)/codebase(P5)/webhook
 ├── frontend/                 # React 18 + TS + Vite + AntD + Redux Toolkit
-├── deploy/                   # docker-compose（PG/pgvector + Redis + Langfuse）
+├── deploy/                   # docker-compose（PG/pgvector + Redis + Neo4j + Langfuse）
 └── docs/                     # 技术方案
 ```
 
@@ -123,6 +124,21 @@ arq app.workers.review_worker.WorkerSettings
 - **无监控也能跑**：未配 `PROMETHEUS_URL` / `LOKI_URL` / `DEPLOY_REPO` 时各自用 mock 数据，UI 上完整体验。
 - 体验：到「告警根因 (P3)」页用预置示例（HighMemoryUsage）点「开始根因分析」，看并行步骤 + 流式根因报告。
 
-## 下一步（P5）
+## 代码理解链路说明（P5）
 
-代码理解 Agent：AST 解析 + Neo4j 代码图谱 + 分层摘要 + 改动影响分析。
+```
+索引：遍历仓库 → tree-sitter 解析 → 抽取 Function + CALLS → 写入 Neo4j 图谱
+问答：问题提取标识符 → 图谱检索相关函数 → LLM 基于代码上下文流式回答
+影响：目标函数 → 沿 CALLS 反向遍历(深度可配) → 找出所有调用者(影响面) + LLM 总结
+```
+
+- 图谱：`backend/app/kernel/graph/`（store=Neo4j 读写 / parser=tree-sitter / indexer=遍历入库）
+- 支持语言：Python / JS / TS / Java / Go（通用语法树遍历，非逐语言 query）
+- 前置：起 Neo4j（compose 已含），`.env` 配 `NEO4J_*`
+- 体验：到「代码理解 (P5)」页填仓库名 + 本地路径（如本项目 `backend`）→「构建代码图谱」→ 切「代码问答 / 影响分析」。
+  例：索引本项目后问「index_repo 做了什么」，或对 `retrieve` 做影响分析。
+
+## 平台进度
+
+P0 内核 → P1 RAG → P2 事件驱动审查 → P3 AIOps 根因 → P5 代码图谱。
+（P4 需求拆解 Agent：Jira/Confluence 写入 + HITL，可作为后续扩展。）
