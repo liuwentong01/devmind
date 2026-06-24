@@ -17,7 +17,14 @@ dependencies = [
     "langchain>=0.3.0",
     "langchain-core>=0.3.0",
     "langchain-community>=0.3.0",
+    "langchain-text-splitters>=0.3.0",
     "litellm>=1.51.0",
+    # 数据库 + 向量检索 (P1 RAG)
+    "sqlalchemy[asyncio]>=2.0.35",
+    "psycopg[binary]>=3.2.0",
+    "pgvector>=0.3.5",
+    # 异步任务队列 (P2 事件驱动)
+    "arq>=0.26.0",
     # 可观测
     "langfuse>=2.53.0",
 ]

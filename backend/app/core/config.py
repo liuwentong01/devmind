@@ -25,6 +25,22 @@ class Settings(BaseSettings):
     llm_default_model: str = "deepseek/deepseek-chat"
     llm_temperature: float = 0.3
 
+    # Embedding（RAG 向量化，需与所选模型的维度匹配）
+    embedding_model: str = "dashscope/text-embedding-v3"
+    embedding_dim: int = 1024
+
+    # RAG 检索参数
+    rag_chunk_size: int = 500
+    rag_chunk_overlap: int = 80
+    rag_top_k: int = 4
+
+    # 代码审查 Agent（P2）
+    github_api_base: str = "https://api.github.com"
+    github_token: str = ""
+    github_webhook_secret: str = ""
+    review_rule_source: str = "review-rule"  # 团队审查规范在知识库中的来源标识
+    review_top_k: int = 4
+
     # 数据库 / 缓存（P0 预留）
     database_url: str = "postgresql+psycopg://devmind:devmind@localhost:5432/devmind"
     redis_url: str = "redis://localhost:6379/0"

@@ -6,8 +6,13 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.core.config import get_settings
+from app.core.db import init_db
 from app.core.logging import get_logger, setup_logging
+from app.gateway.knowledge_routes import router as knowledge_router
+from app.gateway.review_routes import router as review_router
 from app.gateway.routes import router
+from app.gateway.webhook_routes import router as webhook_router
+from app.kernel.queue import close_queue
 
 
 @asynccontextmanager
@@ -16,14 +21,21 @@ async def lifespan(app: FastAPI):
     setup_logging()
     settings = get_settings()
     logger = get_logger("main")
+    # 初始化数据库（启用 pgvector 扩展 + 建表）；失败不阻断启动，便于纯 P0 场景调试
+    try:
+        await init_db()
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("db_init_skipped", error=str(exc))
     logger.info(
         "app_start",
         app=settings.app_name,
         env=settings.app_env,
         llm_model=settings.llm_default_model,
+        embedding_model=settings.embedding_model,
         langfuse=settings.langfuse_enabled,
     )
     yield
+    await close_queue()
     logger.info("app_stop")
 
 
@@ -46,6 +58,9 @@ def create_app() -> FastAPI:
     )
 
     app.include_router(router, prefix="/api")
+    app.include_router(knowledge_router, prefix="/api")
+    app.include_router(review_router, prefix="/api")
+    app.include_router(webhook_router, prefix="/api")
     return app
 
 
