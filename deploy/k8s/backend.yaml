@@ -1,4 +1,6 @@
-# 后端 API：Deployment + Service
+# 后端 API：Deployment + ClusterIP Service。发布前先执行 migration.yaml，再应用本文件。
+# 使用：kubectl apply -f deploy/k8s/backend.yaml && kubectl -n devmind rollout status deploy/devmind-backend
+# 必改项：不可变镜像 digest、Host 探针值、只读代码 PVC/CSI、资源配额与拓扑策略。
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -6,6 +8,14 @@ metadata:
   namespace: devmind
 spec:
   replicas: 2
+  revisionHistoryLimit: 5
+  minReadySeconds: 10
+  progressDeadlineSeconds: 600
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxUnavailable: 0
+      maxSurge: 1
   selector:
     matchLabels:
       app: devmind-backend
@@ -14,28 +24,84 @@ spec:
       labels:
         app: devmind-backend
     spec:
+      serviceAccountName: devmind
+      automountServiceAccountToken: false
+      terminationGracePeriodSeconds: 45
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 10001
+        runAsGroup: 10001
+        fsGroup: 10001
+        seccompProfile:
+          type: RuntimeDefault
+      topologySpreadConstraints:
+        # 尽量把副本分散到不同节点；ScheduleAnyway 避免小型集群因无法分散而永久 Pending。
+        - maxSkew: 1
+          topologyKey: kubernetes.io/hostname
+          whenUnsatisfiable: ScheduleAnyway
+          labelSelector:
+            matchLabels:
+              app: devmind-backend
       containers:
         - name: api
-          image: devmind/backend:latest
+          # 发布时替换为不可变 tag，生产推荐进一步固定为 @sha256:digest。
+          image: ghcr.io/your-org/devmind-backend:0.1.0
+          imagePullPolicy: IfNotPresent
           ports:
-            - containerPort: 8000
+            - name: http
+              containerPort: 8000
           envFrom:
             - configMapRef:
                 name: devmind-config
             - secretRef:
                 name: devmind-secret
           readinessProbe:
+            # readiness 会探测 PostgreSQL；失败只摘除流量，不应像 liveness 一样触发重启。
             httpGet:
-              path: /api/health
-              port: 8000
-            initialDelaySeconds: 10
+              path: /api/health/ready
+              port: http
+              httpHeaders:
+                - name: Host
+                  value: devmind.example.com
+            timeoutSeconds: 3
             periodSeconds: 10
+            failureThreshold: 3
           livenessProbe:
+            # liveness 只确认进程事件循环可响应，防止数据库故障造成重启风暴。
             httpGet:
-              path: /api/health
-              port: 8000
-            initialDelaySeconds: 20
+              path: /api/health/live
+              port: http
+              httpHeaders:
+                - name: Host
+                  value: devmind.example.com
+            timeoutSeconds: 3
             periodSeconds: 20
+            failureThreshold: 3
+          startupProbe:
+            httpGet:
+              path: /api/health/live
+              port: http
+              httpHeaders:
+                - name: Host
+                  value: devmind.example.com
+            timeoutSeconds: 3
+            periodSeconds: 5
+            failureThreshold: 24
+          lifecycle:
+            preStop:
+              exec:
+                command: ["/bin/sh", "-c", "sleep 10"]
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ["ALL"]
+          volumeMounts:
+            - name: tmp
+              mountPath: /tmp
+            - name: code-workspace
+              mountPath: /workspace
+              readOnly: true
           resources:
             requests:
               cpu: "250m"
@@ -43,6 +109,14 @@ spec:
             limits:
               cpu: "1"
               memory: "1Gi"
+      volumes:
+        - name: tmp
+          emptyDir:
+            sizeLimit: 256Mi
+        # 占位卷仅保证安全根目录存在；生产请替换为只读 PVC/CSI 代码卷。
+        - name: code-workspace
+          emptyDir:
+            sizeLimit: 1Mi
 ---
 apiVersion: v1
 kind: Service
@@ -53,5 +127,6 @@ spec:
   selector:
     app: devmind-backend
   ports:
-    - port: 8000
-      targetPort: 8000
+    - name: http
+      port: 8000
+      targetPort: http

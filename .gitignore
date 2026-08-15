@@ -1,3 +1,5 @@
+# 只忽略可重建制品、本地环境和真实 Secret；示例配置必须继续纳入版本控制。
+
 # Python
 __pycache__/
 *.py[cod]
@@ -9,6 +11,9 @@ venv/
 
 # 环境变量
 .env
+.env.*
+!**/.env.example
+!**/.env.*.example
 
 # K8s 真实密钥（仅提交 secret.example.yaml）
 deploy/k8s/secret.yaml
@@ -17,6 +22,7 @@ deploy/k8s/secret.yaml
 node_modules/
 dist/
 .vite/
+*.tsbuildinfo
 
 # IDE / OS
 .DS_Store

@@ -1,11 +1,19 @@
-# ARQ 异步 worker：与后端同镜像，覆盖启动命令（无对外 Service）
+# ARQ 异步 worker：与 API 使用同一镜像但覆盖 command，无对外 Service。
+# 使用：kubectl apply -f deploy/k8s/worker.yaml；通过 Redis 消费 Review/RCA，并运行清理 cron。
+# Worker 扩缩容更适合使用队列深度/KEDA；本仓库 CPU HPA 只是通用保底。
 apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: devmind-worker
   namespace: devmind
 spec:
-  replicas: 1
+  replicas: 2
+  revisionHistoryLimit: 5
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxUnavailable: 0
+      maxSurge: 1
   selector:
     matchLabels:
       app: devmind-worker
@@ -14,15 +22,45 @@ spec:
       labels:
         app: devmind-worker
     spec:
+      serviceAccountName: devmind
+      automountServiceAccountToken: false
+      terminationGracePeriodSeconds: 60
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 10001
+        runAsGroup: 10001
+        fsGroup: 10001
+        seccompProfile:
+          type: RuntimeDefault
+      topologySpreadConstraints:
+        - maxSkew: 1
+          topologyKey: kubernetes.io/hostname
+          whenUnsatisfiable: ScheduleAnyway
+          labelSelector:
+            matchLabels:
+              app: devmind-worker
       containers:
         - name: worker
-          image: devmind/backend:latest
+          image: ghcr.io/your-org/devmind-backend:0.1.0
+          imagePullPolicy: IfNotPresent
           command: ["arq", "app.workers.worker.WorkerSettings"]
           envFrom:
             - configMapRef:
                 name: devmind-config
             - secretRef:
                 name: devmind-secret
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ["ALL"]
+          lifecycle:
+            preStop:
+              exec:
+                command: ["/bin/sh", "-c", "sleep 15"]
+          volumeMounts:
+            - name: tmp
+              mountPath: /tmp
           resources:
             requests:
               cpu: "250m"
@@ -30,3 +68,7 @@ spec:
             limits:
               cpu: "1"
               memory: "1Gi"
+      volumes:
+        - name: tmp
+          emptyDir:
+            sizeLimit: 256Mi

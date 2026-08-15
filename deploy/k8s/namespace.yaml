@@ -1,4 +1,11 @@
+# DevMind 专用 Namespace，并在命名空间级强制 Kubernetes Pod Security restricted。
+# 首次部署：kubectl apply -f deploy/k8s/namespace.yaml
+# 如果现有工作负载不满足 restricted，应该修工作负载安全上下文，而不是降低本策略。
 apiVersion: v1
 kind: Namespace
 metadata:
   name: devmind
+  labels:
+    pod-security.kubernetes.io/enforce: restricted
+    pod-security.kubernetes.io/audit: restricted
+    pod-security.kubernetes.io/warn: restricted

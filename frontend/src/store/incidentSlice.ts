@@ -1,3 +1,6 @@
+// P3 RCA 状态：把后端 step/token/error 事件转换为用户可见的进度与报告；
+// 证据降级 warning 是报告的 token 前缀，不是独立 SSE 事件。
+// 页面离开后该状态只存在于浏览器内，不是后台任务的可靠状态存储。
 import { createSlice, type PayloadAction } from '@reduxjs/toolkit';
 import type { RcaStep } from '../api/incident';
 

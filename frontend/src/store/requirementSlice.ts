@@ -1,3 +1,5 @@
+// P4 HITL 交互状态：保存 plan 返回的 threadId、可编辑任务和 confirm 结果。
+// 真正的跨请求状态位于 PostgreSQL；Redux 仅负责当前页面体验。
 import { createSlice, type PayloadAction } from '@reduxjs/toolkit';
 import type { ConfirmResult, TaskItem } from '../api/requirement';
 

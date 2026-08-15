@@ -1,5 +1,7 @@
-// 知识库 API：文档管理（REST）+ RAG 问答（SSE）。
+// 知识库 API：文档管理（REST）+ RAG 问答（SSE）。KnowledgePage 使用 CRUD 函数，
+// queryKnowledge 则把 sources/token/error/done 回调交给页面。
 import { parseSSEStream } from './sse';
+import { jsonRequest, requestJson, requestVoid } from './client';
 
 export interface DocumentItem {
   id: number;
@@ -25,26 +27,23 @@ export interface QueryCallbacks {
 }
 
 export async function listDocuments(): Promise<DocumentItem[]> {
-  const resp = await fetch('/api/knowledge/documents');
-  if (!resp.ok) throw new Error(`加载文档失败：HTTP ${resp.status}`);
-  return resp.json();
+  return requestJson<DocumentItem[]>('/api/knowledge/documents', {}, '加载文档失败');
 }
 
-export async function ingestDocument(title: string, content: string): Promise<void> {
-  const resp = await fetch('/api/knowledge/documents', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ title, content }),
-  });
-  if (!resp.ok) {
-    const detail = await resp.json().catch(() => ({}));
-    throw new Error(detail.detail || `入库失败：HTTP ${resp.status}`);
-  }
+export async function ingestDocument(
+  title: string,
+  content: string,
+  source: string,
+): Promise<void> {
+  await requestVoid(
+    '/api/knowledge/documents',
+    jsonRequest('POST', { title, content, source }),
+    '入库失败',
+  );
 }
 
 export async function deleteDocument(id: number): Promise<void> {
-  const resp = await fetch(`/api/knowledge/documents/${id}`, { method: 'DELETE' });
-  if (!resp.ok && resp.status !== 204) throw new Error(`删除失败：HTTP ${resp.status}`);
+  await requestVoid(`/api/knowledge/documents/${id}`, { method: 'DELETE' }, '删除失败');
 }
 
 export async function queryKnowledge(

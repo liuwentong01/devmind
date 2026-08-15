@@ -1,5 +1,7 @@
+// P0 通用对话页面：提交最近上下文并把 tool/token/done/error SSE 事件写入 chat slice。
+// 使用示例：输入“现在几点？再算 12*(3+4)”可同时观察工具调用和流式回答。
 import { useRef, useState } from 'react';
-import { Button, Input, Space, Tag, Typography } from 'antd';
+import { Button, Input, Space, Tag, Typography, message } from 'antd';
 import { ClearOutlined, SendOutlined } from '@ant-design/icons';
 import { useAppDispatch, useAppSelector } from '../store/hooks';
 import {
@@ -11,7 +13,7 @@ import {
   setError,
   startAssistantMessage,
 } from '../store/chatSlice';
-import { streamChat, type ApiChatMessage } from '../api/chat';
+import { buildChatHistory, streamChat, type ApiChatMessage } from '../api/chat';
 
 const { Text } = Typography;
 
@@ -32,9 +34,14 @@ export default function ChatPage() {
     if (!content || streaming) return;
 
     // 1. 落用户消息，构造发给后端的历史
-    const history: ApiChatMessage[] = messages.map((m) => ({ role: m.role, content: m.content }));
-    history.push({ role: 'user', content });
-    dispatch(addUserMessage(content));
+    const previous: ApiChatMessage[] = messages.map((m) => ({
+      role: m.role,
+      content: m.content,
+    }));
+    const { history, truncated } = buildChatHistory(previous, content);
+    const current = history[history.length - 1]?.content ?? content;
+    if (truncated) message.info('对话较长，已自动保留最近且不超过服务端限制的上下文');
+    dispatch(addUserMessage(current));
     setInput('');
 
     // 2. 插入 assistant 占位，拿到它的 id 用于后续增量更新
@@ -111,6 +118,8 @@ export default function ChatPage() {
             }
           }}
           placeholder="输入消息，Enter 发送，Shift+Enter 换行"
+          maxLength={16_000}
+          showCount
           autoSize={{ minRows: 1, maxRows: 4 }}
           disabled={streaming}
         />

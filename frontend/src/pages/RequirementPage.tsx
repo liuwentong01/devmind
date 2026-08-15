@@ -1,10 +1,11 @@
+// P4 两阶段 HITL 页面：先 plan、允许人工编辑，再 confirm 触发 Jira 写入。
+// thread_id 是两次请求的关联键；页面不得自行伪造“已完成”状态。
 import { useState } from 'react';
 import {
   Alert,
   Button,
   Card,
   Input,
-  InputNumber,
   Result,
   Select,
   Space,
@@ -85,14 +86,15 @@ export default function RequirementPage() {
       title: '类型',
       dataIndex: 'type',
       width: 110,
-      render: (v: string, _r: TaskItem, i: number) => (
-        <Select
+      render: (v: TaskItem['type'], _r: TaskItem, i: number) => (
+        <Select<TaskItem['type']>
           value={v}
           style={{ width: 100 }}
           onChange={(val) => dispatch(updateTask({ index: i, patch: { type: val } }))}
           options={[
             { value: 'backend', label: '后端' },
             { value: 'frontend', label: '前端' },
+            { value: 'task', label: '通用任务' },
           ]}
         />
       ),
@@ -101,14 +103,20 @@ export default function RequirementPage() {
       title: '点数',
       dataIndex: 'story_points',
       width: 90,
-      render: (v: number | null, _r: TaskItem, i: number) => (
-        <InputNumber
+      render: (v: TaskItem['story_points'], _r: TaskItem, i: number) => (
+        <Select
           value={v ?? undefined}
-          min={1}
-          max={13}
-          style={{ width: 70 }}
+          allowClear
+          placeholder="未估"
+          style={{ width: 76 }}
+          options={[1, 2, 3, 5, 8].map((point) => ({ value: point, label: point }))}
           onChange={(val) =>
-            dispatch(updateTask({ index: i, patch: { story_points: (val as number) ?? null } }))
+            dispatch(
+              updateTask({
+                index: i,
+                patch: { story_points: (val as TaskItem['story_points']) ?? null },
+              }),
+            )
           }
         />
       ),

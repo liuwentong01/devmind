@@ -1,0 +1,63 @@
+# 版本化的一次性迁移 Job；必须在 API/worker 新版本之前执行并等待成功。
+# 使用：kubectl apply -f deploy/k8s/migration.yaml && kubectl -n devmind wait --for=condition=complete job/devmind-db-migrate-20260815-0002 --timeout=10m
+# 每次新增 Alembic revision 都要更新 Job 名；高权限连接只来自 devmind-migration-secret。
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: devmind-db-migrate-20260815-0002
+  namespace: devmind
+spec:
+  backoffLimit: 3
+  activeDeadlineSeconds: 600
+  ttlSecondsAfterFinished: 86400
+  template:
+    metadata:
+      labels:
+        app: devmind-db-migrate
+    spec:
+      restartPolicy: OnFailure
+      serviceAccountName: devmind
+      automountServiceAccountToken: false
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 10001
+        runAsGroup: 10001
+        fsGroup: 10001
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: migrate
+          image: ghcr.io/your-org/devmind-backend:0.1.0
+          imagePullPolicy: IfNotPresent
+          command: ["alembic", "upgrade", "head"]
+          envFrom:
+            - configMapRef:
+                name: devmind-config
+            - secretRef:
+                name: devmind-secret
+          env:
+            # 迁移使用独立 DDL 角色；该 Secret 不注入 API/worker。
+            - name: MIGRATION_DATABASE_URL
+              valueFrom:
+                secretKeyRef:
+                  name: devmind-migration-secret
+                  key: DATABASE_URL
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ["ALL"]
+          volumeMounts:
+            - name: tmp
+              mountPath: /tmp
+          resources:
+            requests:
+              cpu: "100m"
+              memory: "256Mi"
+            limits:
+              cpu: "500m"
+              memory: "512Mi"
+      volumes:
+        - name: tmp
+          emptyDir:
+            sizeLimit: 128Mi

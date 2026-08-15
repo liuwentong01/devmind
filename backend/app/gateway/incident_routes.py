@@ -1,7 +1,12 @@
-"""告警根因 API：手动流式根因分析（SSE）。
+"""手动告警根因分析 API，把 RCA LangGraph 执行过程转换为 SSE。
 
-通过 stream_mode=["updates","messages"] 把各节点进度（拉取/分析/验证）转成 step 事件，
-把 conclude 节点的最终报告 token 流式推给前端。
+调用链：``POST /api/incident/analyze/stream`` → 拉日志/指标/发布 → 生成并验证假设 → conclude。
+请求示例：``{"alertname":"HighErrorRate","service":"checkout","severity":"critical"}``。
+``updates`` 产生 ``step`` 进度，``messages`` 产生 conclude 的 ``token``，最后发送 ``done``。
+
+生产边界：报告是辅助诊断而非自动事实；证据降级、未确认或低置信度时必须把 warning 放在
+结论前。Loki/Prometheus/GitHub 证据都有大小与迭代上限，生产禁止 mock 证据。接口只分析，
+不会自动执行回滚、变更生产或关闭告警。
 """
 
 import json
@@ -10,8 +15,9 @@ from collections.abc import AsyncGenerator
 from fastapi import APIRouter
 from sse_starlette.sse import EventSourceResponse
 
-from app.agents.incident_rca.graph import build_rca_agent
+from app.agents.incident_rca.graph import _conclusion_warning, build_rca_agent
 from app.core.logging import get_logger
+from app.gateway.sse import stream_response
 from app.schemas.incident import AlertInput
 
 logger = get_logger("gateway.incident")
@@ -29,12 +35,41 @@ STEP_LABELS = {
 
 
 async def _stream_rca(alert: dict) -> AsyncGenerator[dict, None]:
+    """运行 RCA 图并生成 ``step/token/done/error`` 事件。
+
+    LangGraph 版本/模型可能只在 updates 中给完整 conclusion，也可能在 messages 中流 token，
+    因而同时支持两条输出路径，并用两个标志避免警告或完整结论重复发送。
+    """
     agent = build_rca_agent()
     inputs = {"alert": alert, "iteration": 0}
+    streamed_state = dict(inputs)
+    warning_sent = False
+    conclusion_content_sent = False
     try:
         async for mode, data in agent.astream(inputs, stream_mode=["updates", "messages"]):
             if mode == "updates":
                 for node, update in data.items():
+                    if isinstance(update, dict):
+                        streamed_state.update(update)
+                    # 警告必须先于任何结论 token 到达；否则 UI 已展示“确定根因”后再追加风险
+                    # 提示，会让操作者产生错误的确定性印象。
+                    if node == "conclude" and not warning_sent:
+                        warning = _conclusion_warning(streamed_state)
+                        if warning:
+                            yield {"event": "token", "data": warning}
+                        warning_sent = True
+                    if (
+                        node == "conclude"
+                        and not conclusion_content_sent
+                        and isinstance(update, dict)
+                    ):
+                        final_text = str(update.get("conclusion") or "")
+                        warning = _conclusion_warning(streamed_state)
+                        if warning and final_text.startswith(warning):
+                            final_text = final_text[len(warning) :]
+                        if final_text:
+                            yield {"event": "token", "data": final_text}
+                            conclusion_content_sent = True
                     detail = ""
                     if node == "analyze" and isinstance(update, dict):
                         hyps = update.get("hypotheses") or []
@@ -55,15 +90,24 @@ async def _stream_rca(alert: dict) -> AsyncGenerator[dict, None]:
                     continue
                 text = getattr(msg_chunk, "content", "") or ""
                 if text:
+                    if not warning_sent:
+                        warning = _conclusion_warning(streamed_state)
+                        if warning:
+                            yield {"event": "token", "data": warning}
+                        warning_sent = True
                     yield {"event": "token", "data": text}
+                    conclusion_content_sent = True
 
         yield {"event": "done", "data": "[DONE]"}
-    except Exception as exc:  # noqa: BLE001
-        logger.error("rca_stream_error", error=str(exc))
-        yield {"event": "error", "data": json.dumps({"message": str(exc)}, ensure_ascii=False)}
+    except Exception:  # noqa: BLE001
+        logger.exception("rca_stream_error")
+        yield {
+            "event": "error",
+            "data": json.dumps({"message": "根因分析失败，请稍后重试"}, ensure_ascii=False),
+        }
 
 
 @router.post("/analyze/stream")
 async def analyze_stream(alert: AlertInput) -> EventSourceResponse:
-    """手动触发根因分析，流式返回步骤进度 + 最终报告。"""
-    return EventSourceResponse(_stream_rca(alert.to_dict()))
+    """手动触发根因分析，流式返回步骤、风险提示与最终报告。"""
+    return stream_response(_stream_rca(alert.to_dict()))

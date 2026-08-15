@@ -1,3 +1,5 @@
+// P1 知识问答交互状态：保存问题、流式答案、引用来源和 loading/error。
+// 文档列表本身由页面请求后写入；后端仍是数据事实来源。
 import { createSlice, type PayloadAction } from '@reduxjs/toolkit';
 import type { DocumentItem, Source } from '../api/knowledge';
 

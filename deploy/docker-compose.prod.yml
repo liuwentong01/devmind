@@ -1,0 +1,163 @@
+# 生产 Compose 只编排无状态应用；PostgreSQL/Redis/Neo4j 应使用有备份、监控和
+# 多可用区能力的托管服务。以 ${VAR:?message} 标记的变量必须显式提供。
+# 使用示例：docker compose --env-file /secure/devmind.env -f deploy/docker-compose.prod.yml up -d migrate
+# 迁移成功后：docker compose --env-file /secure/devmind.env -f deploy/docker-compose.prod.yml up -d backend worker frontend
+# 外部 TLS/OIDC 代理负责公网入口。
+name: devmind
+
+x-backend-environment: &backend-environment
+  # API 与 worker 共用这组运行时配置；migration 仅额外获得独立 DDL URL。
+  APP_ENV: production
+  LOG_LEVEL: ${LOG_LEVEL:-INFO}
+  AUTH_ENABLED: "true"
+  ALLOW_UNSIGNED_WEBHOOKS: "false"
+  ALLOW_JIRA_DRY_RUN: "false"
+  EXPOSE_API_DOCS: "false"
+  REQUIRE_TLS_UPSTREAMS: "true"
+  TRUSTED_HOSTS: ${DEVMIND_HOSTNAME:?set DEVMIND_HOSTNAME},${DEVMIND_WEBHOOK_HOSTNAME:?set DEVMIND_WEBHOOK_HOSTNAME}
+  CORS_ORIGINS: https://${DEVMIND_HOSTNAME:?set DEVMIND_HOSTNAME}
+  FORWARDED_ALLOW_IPS: ${FORWARDED_ALLOW_IPS:-127.0.0.1}
+  DEVMIND_API_KEYS: ${DEVMIND_API_KEYS:?set DEVMIND_API_KEYS}
+  DEVMIND_ADMIN_API_KEYS: ${DEVMIND_ADMIN_API_KEYS:?set DEVMIND_ADMIN_API_KEYS}
+  GITHUB_WEBHOOK_SECRET: ${GITHUB_WEBHOOK_SECRET:?set GITHUB_WEBHOOK_SECRET}
+  ALERT_WEBHOOK_SECRET: ${ALERT_WEBHOOK_SECRET:?set ALERT_WEBHOOK_SECRET}
+  DATABASE_URL: ${DATABASE_URL:?set DATABASE_URL}
+  REDIS_URL: ${REDIS_URL:?set REDIS_URL}
+  NEO4J_URI: ${NEO4J_URI:?set NEO4J_URI}
+  NEO4J_USER: ${NEO4J_USER:?set NEO4J_USER}
+  NEO4J_PASSWORD: ${NEO4J_PASSWORD:?set NEO4J_PASSWORD}
+  CODE_INDEX_ALLOWED_ROOTS: /workspace
+  COST_TRACKING_BACKEND: redis
+  COST_REDIS_KEY: ${COST_REDIS_KEY:-devmind:cost:v1}
+  LLM_DEFAULT_MODEL: ${LLM_DEFAULT_MODEL:-deepseek/deepseek-chat}
+  EMBEDDING_MODEL: ${EMBEDDING_MODEL:-dashscope/text-embedding-v3}
+  EMBEDDING_DIM: ${EMBEDDING_DIM:-1024}
+  # 供应商密钥均按需传入；应用会根据实际模型前缀 fail closed。
+  DEEPSEEK_API_KEY: ${DEEPSEEK_API_KEY:-}
+  DASHSCOPE_API_KEY: ${DASHSCOPE_API_KEY:-}
+  ZHIPUAI_API_KEY: ${ZHIPUAI_API_KEY:-}
+  OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+  ALLOW_UNVALIDATED_MODEL_PROVIDER: ${ALLOW_UNVALIDATED_MODEL_PROVIDER:-false}
+  GITHUB_TOKEN: ${GITHUB_TOKEN:?set GITHUB_TOKEN}
+  ATLASSIAN_BASE_URL: ${ATLASSIAN_BASE_URL:-}
+  ATLASSIAN_EMAIL: ${ATLASSIAN_EMAIL:-}
+  ATLASSIAN_API_TOKEN: ${ATLASSIAN_API_TOKEN:-}
+  JIRA_DEFAULT_PROJECT: ${JIRA_DEFAULT_PROJECT:-}
+  PROMETHEUS_URL: ${PROMETHEUS_URL:-}
+  LOKI_URL: ${LOKI_URL:-}
+  DEPLOY_REPO: ${DEPLOY_REPO:-}
+  IM_WEBHOOK_URL: ${IM_WEBHOOK_URL:?set IM_WEBHOOK_URL}
+  LANGFUSE_PUBLIC_KEY: ${LANGFUSE_PUBLIC_KEY:-}
+  LANGFUSE_SECRET_KEY: ${LANGFUSE_SECRET_KEY:-}
+  LANGFUSE_HOST: ${LANGFUSE_HOST:-}
+
+x-backend-runtime: &backend-runtime
+  # YAML anchor 统一非 root、只读文件系统、资源和日志限制，避免三个服务配置漂移。
+  image: ${DEVMIND_BACKEND_IMAGE:?set immutable DEVMIND_BACKEND_IMAGE}
+  environment: *backend-environment
+  user: "10001:10001"
+  init: true
+  read_only: true
+  tmpfs:
+    - /tmp:uid=10001,gid=10001,mode=1770,size=256m
+  volumes:
+    - type: bind
+      source: ${CODE_INDEX_HOST_PATH:?set CODE_INDEX_HOST_PATH}
+      target: /workspace
+      read_only: true
+  cap_drop: ["ALL"]
+  security_opt:
+    - no-new-privileges:true
+  pids_limit: 512
+  networks: [app]
+  logging:
+    driver: json-file
+    options:
+      max-size: 10m
+      max-file: "5"
+
+services:
+  migrate:
+    <<: *backend-runtime
+    environment:
+      <<: *backend-environment
+      # 推荐使用独立的 DDL 角色；API/worker 继续只拿 DATABASE_URL 的运行时最小权限账号。
+      MIGRATION_DATABASE_URL: ${MIGRATION_DATABASE_URL:?set MIGRATION_DATABASE_URL}
+    command: ["alembic", "upgrade", "head"]
+    restart: "no"
+    mem_limit: 512m
+    cpus: 0.5
+
+  backend:
+    <<: *backend-runtime
+    # frontend/nginx.conf 与 Kubernetes 共用同一镜像，上游名固定为
+    # devmind-backend；Compose 必须显式提供相同的网络 DNS 别名。
+    networks:
+      app:
+        aliases:
+          - devmind-backend
+    restart: unless-stopped
+    stop_grace_period: 45s
+    expose: ["8000"]
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+    healthcheck:
+      test:
+        - CMD
+        - python
+        - -c
+        - "import urllib.request; r=urllib.request.Request('http://127.0.0.1:8000/api/health/ready', headers={'Host':'${DEVMIND_HOSTNAME}'}); urllib.request.urlopen(r, timeout=3)"
+      interval: 15s
+      timeout: 5s
+      start_period: 30s
+      retries: 5
+    mem_limit: 1g
+    cpus: 1.0
+
+  worker:
+    <<: *backend-runtime
+    command: ["arq", "app.workers.worker.WorkerSettings"]
+    restart: unless-stopped
+    stop_grace_period: 60s
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+    mem_limit: 1g
+    cpus: 1.0
+
+  frontend:
+    image: ${DEVMIND_FRONTEND_IMAGE:?set immutable DEVMIND_FRONTEND_IMAGE}
+    environment:
+      # 服务端注入后端请求；该值必须同时出现在 DEVMIND_API_KEYS 中。
+      DEVMIND_API_KEY: ${DEVMIND_FRONTEND_API_KEY:?set DEVMIND_FRONTEND_API_KEY}
+      NGINX_ENVSUBST_FILTER: "^DEVMIND_API_KEY$"
+    user: "101:101"
+    init: true
+    read_only: true
+    tmpfs:
+      - /tmp:uid=101,gid=101,mode=1770,size=64m
+      - /etc/nginx/conf.d:uid=101,gid=101,mode=0750,size=1m
+    cap_drop: ["ALL"]
+    security_opt:
+      - no-new-privileges:true
+    pids_limit: 256
+    restart: unless-stopped
+    stop_grace_period: 30s
+    depends_on:
+      backend:
+        condition: service_healthy
+    ports:
+      - "${BIND_ADDRESS:-127.0.0.1}:${HTTP_PORT:-8080}:8080"
+    networks: [app]
+    mem_limit: 256m
+    cpus: 0.5
+    logging:
+      driver: json-file
+      options:
+        max-size: 10m
+        max-file: "5"
+
+networks:
+  app:
+    driver: bridge

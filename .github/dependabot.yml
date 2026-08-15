@@ -1,0 +1,19 @@
+# 每周检查 Python、前端和 GitHub Actions 更新；生成 PR 后仍必须通过完整 CI 与人工评审。
+# Dependabot 只提出版本变更，不会自动重建 backend 的 pip-compile 哈希锁。
+version: 2
+updates:
+  - package-ecosystem: pip
+    directory: /backend
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 5
+  - package-ecosystem: npm
+    directory: /frontend
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 5
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 5

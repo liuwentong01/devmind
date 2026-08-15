@@ -1,3 +1,5 @@
+// P3 手动 RCA 页面：发送告警描述，按 step 事件展示并行取证/验证进度并流式拼接报告。
+// local 可体验 mock；生产证据是否真实由后端 fail-closed 规则决定。
 import { useState } from 'react';
 import { Button, Card, Form, Input, Select, Space, Steps, Tag, Typography } from 'antd';
 import { ThunderboltOutlined } from '@ant-design/icons';
@@ -110,7 +112,7 @@ export default function IncidentPage() {
               ? '正在并行拉取日志/指标/发布，生成并验证假设…'
               : hasRun
                 ? '等待结论…'
-                : '填写告警信息（或用预置示例）后点「开始根因分析」。未配置监控时会用 mock 数据跑通完整链路。'}
+                : '填写告警信息（或用预置示例）后点「开始根因分析」。仅本地环境在未配置监控时使用 mock；生产会明确标记证据缺失。'}
           </Text>
         )}
       </Card>

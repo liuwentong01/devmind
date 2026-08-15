@@ -1,3 +1,5 @@
+// P5 代码理解状态：记录仓库、图谱查询上下文、流式回答和影响分析结果。
+// Neo4j 图谱才是持久化事实，刷新页面后可重新查询。
 import { createSlice, type PayloadAction } from '@reduxjs/toolkit';
 import type { ImpactResult, IndexStats } from '../api/codebase';
 

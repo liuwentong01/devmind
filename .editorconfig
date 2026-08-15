@@ -1,0 +1,19 @@
+# 编辑器无关的基础格式约定；Ruff/ESLint 仍是 Python/TypeScript 的最终格式门。
+# 支持 EditorConfig 的 IDE 会自动应用，避免换行符和缩进产生无意义 diff。
+root = true
+
+[*]
+charset = utf-8
+end_of_line = lf
+insert_final_newline = true
+trim_trailing_whitespace = true
+
+[*.{py,ts,tsx,js,json,yaml,yml}]
+indent_style = space
+indent_size = 2
+
+[*.py]
+indent_size = 4
+
+[*.md]
+trim_trailing_whitespace = false

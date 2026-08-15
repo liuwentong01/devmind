@@ -2,6 +2,8 @@
 
 FastAPI + LiteLLM(国内模型) + LangGraph 最小 Agent 循环，提供 SSE 流式对话接口。
 
+> 本页 curl 默认用于 `APP_ENV=local`（本地默认关闭 API key 鉴权）。非本地环境必须给业务/API 请求增加 `X-API-Key`，管理端点必须使用独立管理 key；不要把共享 key 写进浏览器 bundle。Webhook 不使用该 header：GitHub 必须带标准 `X-Hub-Signature-256` HMAC，告警入口必须带 `Authorization: Bearer <ALERT_WEBHOOK_SECRET>`。
+
 ## 目录结构
 
 ```
@@ -30,6 +32,43 @@ pip install -e .          # 或 uv pip install -e .
 cp .env.example .env
 ```
 
+### 数据库迁移
+
+首次建库和每次发布都应在启动 API/worker 前执行：
+
+```bash
+alembic upgrade head
+```
+
+生产建议通过 `MIGRATION_DATABASE_URL` 给 Alembic 提供独立 DDL 角色；API/worker 的
+`DATABASE_URL` 使用只具备运行时 DML 权限的账号。托管 PostgreSQL 还应由 DBA 预先
+启用 pgvector，避免长期授予应用账号 `CREATE EXTENSION` 权限。
+
+旧版本若已由 `Base.metadata.create_all` 建出 `documents` / `chunks`，先备份并确认表结构
+仍为旧版基线，再执行：
+
+```bash
+alembic stamp 20260815_0000
+alembic upgrade head
+```
+
+`0001` 会增加 `(document_id, chunk_index)` 唯一约束；旧库升级前先执行以下只读检查，
+若返回任何行，必须按业务保留策略清理重复数据后再迁移（迁移会 fail closed）：
+
+```sql
+SELECT document_id, chunk_index, COUNT(*)
+FROM chunks
+GROUP BY document_id, chunk_index
+HAVING COUNT(*) > 1;
+```
+
+非本地环境会校验 Alembic revision 与数据库中 `vector(N)` 的实际维度，不匹配时拒绝
+启动。初始迁移使用 `vector(1024)`；更换 `EMBEDDING_DIM` 必须先编写并执行显式迁移，
+不能只改环境变量。
+
+需求拆解的待确认任务、Jira 写入进度与结果默认保留 24 小时。ARQ worker
+每小时清理过期数据；处理中计划会保留到其租约也过期，避免在 Jira 批量写入期间丢失幂等进度。
+
 ### 2. 配置模型 Key
 
 编辑 `.env`，填入你要用的国内模型 API Key（至少一个）：
@@ -52,7 +91,8 @@ DEEPSEEK_API_KEY=sk-xxxxx
 uvicorn app.main:app --reload --port 8000
 ```
 
-- 健康检查：<http://localhost:8000/api/health>
+- 存活检查：<http://localhost:8000/api/health/live>
+- 就绪检查：<http://localhost:8000/api/health/ready>
 - 接口文档：<http://localhost:8000/docs>
 
 ### 4. 测试流式对话
@@ -96,6 +136,9 @@ curl -N -X POST http://localhost:8000/api/knowledge/query/stream \
 
 ## P2 代码审查（事件驱动 + 异步队列）
 
+团队规范检索复用 P1 的 PostgreSQL/pgvector 与 Embedding，因此手动和异步审查都需
+这些依赖；Webhook 路径另外需要 Redis，回写 GitHub 还需要最小权限 Token。
+
 ```bash
 # 手动流式审查（无需 GitHub，直接体验）
 curl -N -X POST http://localhost:8000/api/review/stream \
@@ -123,7 +166,7 @@ curl -X POST http://localhost:8000/api/review/trigger \
 
 ## P3 告警根因（AIOps：并行编排 + 假设验证循环）
 
-未配置 Prometheus/Loki/DEPLOY_REPO 时用 mock 数据，可直接跑通：
+仅 `local/test` 在未配置 Prometheus/Loki/DEPLOY_REPO 时使用 mock 数据。非本地环境会明确返回证据缺失，绝不会伪造监控结果。
 
 ```bash
 # 手动流式根因分析（SSE：step 进度 + 报告 token）
@@ -134,6 +177,7 @@ curl -N -X POST http://localhost:8000/api/incident/analyze/stream \
 # 监控告警 Webhook（Alertmanager 格式）→ 入队 → worker 分析并推 IM
 curl -X POST http://localhost:8000/api/webhooks/alert \
   -H "Content-Type: application/json" \
+  -H "Authorization: Bearer ${ALERT_WEBHOOK_SECRET}" \
   -d '{"alerts":[{"status":"firing","labels":{"alertname":"HighMemoryUsage","service":"order-service","severity":"critical"},"annotations":{"description":"内存超 95%"}}]}'
 ```
 
@@ -160,7 +204,7 @@ arq app.workers.worker.WorkerSettings
 # 1. 索引一个本地仓库（构建代码图谱）
 curl -X POST http://localhost:8000/api/codebase/index \
   -H "Content-Type: application/json" \
-  -d '{"repo":"devmind","path":"/Users/liuwentong/Code/ai-knowledge-agent/backend"}'
+  -d '{"repo":"devmind","path":"/srv/devmind/backend"}'
 
 # 2. 代码问答（SSE：先回相关文件，再流式回答）
 curl -N -X POST http://localhost:8000/api/codebase/query/stream \
@@ -186,10 +230,10 @@ curl -X POST http://localhost:8000/api/codebase/impact \
 
 ## P4 需求拆解（HITL 人工闸门）
 
-无 Atlassian 配置时 Jira 写入走 dry-run，可直接体验 HITL：
+`local/test` 可显式开启 Jira dry-run 体验 HITL；非本地环境强制关闭 dry-run，未配置 Atlassian 时确认请求会失败：
 
 ```bash
-# 1. 拆解（暂停态，返回 thread_id + 提议任务，未写库）
+# 1. 拆解（计划写入 PostgreSQL，返回 thread_id + 提议任务，但尚未写 Jira）
 curl -X POST http://localhost:8000/api/requirement/plan \
   -H "Content-Type: application/json" \
   -d '{"prd_text":"用户可用积分兑换商品；运营后台配置商品；兑换记录可导出","project":"DEV"}'
@@ -202,8 +246,11 @@ curl -X POST http://localhost:8000/api/requirement/confirm \
 
 | 方法 | 路径 | 说明 |
 |---|---|---|
-| POST | `/api/requirement/plan` | 拆解 PRD → interrupt 暂停 → 返回提议 |
-| POST | `/api/requirement/confirm` | 人工确认后恢复 → 写 Jira |
+| POST | `/api/requirement/plan` | 拆解 PRD → 持久化待确认计划 → 返回提议 |
+| POST | `/api/requirement/confirm` | 原子认领计划 → 幂等写 Jira → 缓存结果 |
+
+计划和逐任务写入进度保存在 PostgreSQL，因此 `plan` / `confirm` 可落到不同 API 副本；
+重复确认会返回第一次的持久化结果，中途失败只续写尚未完成的 Jira 任务。
 
 ## P6 工程化
 

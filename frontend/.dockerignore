@@ -1,3 +1,11 @@
+# 前端构建上下文：依赖/构建产物在镜像内重建，真实环境文件不得复制进 build stage。
 node_modules
 dist
 .vite
+.env
+.env.*
+!.env.example
+coverage
+*.tsbuildinfo
+.git
+.gitignore

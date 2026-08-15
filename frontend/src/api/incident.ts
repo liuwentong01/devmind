@@ -1,4 +1,5 @@
 // 告警根因 API：流式根因分析（SSE：step 进度 + token 报告）。
+// warning 作为报告 token 前缀展示；error 才是独立终止事件。
 import { parseSSEStream } from './sse';
 
 export interface AlertInput {

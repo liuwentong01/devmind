@@ -1,10 +1,12 @@
-// 需求拆解 API（HITL 两阶段）：plan（拆解，暂停）→ confirm（确认写 Jira）。
+// 需求拆解 API（HITL 两阶段）：plan 返回 thread_id/可编辑任务，confirm 使用同一
+// thread_id 提交人工批准内容。跨请求状态由后端 PostgreSQL 保存，不在本模块缓存。
+import { jsonRequest, requestJson } from './client';
 
 export interface TaskItem {
   title: string;
-  type: string;
+  type: 'backend' | 'frontend' | 'task';
   description: string;
-  story_points: number | null;
+  story_points: 1 | 2 | 3 | 5 | 8 | null;
   acceptance_criteria: string;
 }
 
@@ -26,26 +28,20 @@ export async function planRequirement(body: {
   project?: string;
   epic?: string;
 }): Promise<PlanResult> {
-  const resp = await fetch('/api/requirement/plan', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(body),
-  });
-  const data = await resp.json().catch(() => ({}));
-  if (!resp.ok) throw new Error(data.detail || `拆解失败：HTTP ${resp.status}`);
-  return data as PlanResult;
+  return requestJson<PlanResult>(
+    '/api/requirement/plan',
+    jsonRequest('POST', body),
+    '拆解失败',
+  );
 }
 
 export async function confirmRequirement(
   threadId: string,
   tasks: TaskItem[],
 ): Promise<ConfirmResult> {
-  const resp = await fetch('/api/requirement/confirm', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ thread_id: threadId, tasks }),
-  });
-  const data = await resp.json().catch(() => ({}));
-  if (!resp.ok) throw new Error(data.detail || `确认失败：HTTP ${resp.status}`);
-  return data as ConfirmResult;
+  return requestJson<ConfirmResult>(
+    '/api/requirement/confirm',
+    jsonRequest('POST', { thread_id: threadId, tasks }),
+    '确认失败',
+  );
 }

@@ -1,5 +1,7 @@
 // 代码理解 API：索引仓库 + 代码问答(SSE) + 影响分析。
+// 索引 path 只作为请求值；服务端仍会解析真实路径并检查允许根目录。
 import { parseSSEStream } from './sse';
+import { jsonRequest, requestJson } from './client';
 
 export interface IndexStats {
   repo: string;
@@ -27,14 +29,11 @@ export interface CodeQaCallbacks {
 }
 
 export async function indexRepo(repo: string, path: string): Promise<IndexStats> {
-  const resp = await fetch('/api/codebase/index', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ repo, path }),
-  });
-  const data = await resp.json().catch(() => ({}));
-  if (!resp.ok) throw new Error(data.detail || `索引失败：HTTP ${resp.status}`);
-  return data as IndexStats;
+  return requestJson<IndexStats>(
+    '/api/codebase/index',
+    jsonRequest('POST', { repo, path }),
+    '索引失败',
+  );
 }
 
 export async function queryCodebase(
@@ -61,12 +60,9 @@ export async function analyzeImpact(
   func: string,
   depth = 3,
 ): Promise<ImpactResult> {
-  const resp = await fetch('/api/codebase/impact', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ repo, function: func, depth }),
-  });
-  const data = await resp.json().catch(() => ({}));
-  if (!resp.ok) throw new Error(data.detail || `分析失败：HTTP ${resp.status}`);
-  return data as ImpactResult;
+  return requestJson<ImpactResult>(
+    '/api/codebase/impact',
+    jsonRequest('POST', { repo, function: func, depth }),
+    '分析失败',
+  );
 }

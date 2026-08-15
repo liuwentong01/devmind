@@ -1,3 +1,5 @@
+// P0 对话状态：保存消息、当前工具和 SSE 生命周期；token 事件增量追加到最后一条助手消息。
+// 典型调用链：ChatPage → api/chat.ts → SSE handler → 本 slice 的 action。
 import { createSlice, nanoid, type PayloadAction } from '@reduxjs/toolkit';
 
 export type Role = 'user' | 'assistant';

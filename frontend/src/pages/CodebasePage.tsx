@@ -1,3 +1,5 @@
+// P5 页面：构建代码图谱、流式代码问答并执行函数影响分析。
+// path 会被后端解析到 CODE_INDEX_ALLOWED_ROOTS 内，前端输入校验不是安全边界。
 import { useState } from 'react';
 import {
   Button,

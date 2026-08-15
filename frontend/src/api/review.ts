@@ -1,5 +1,7 @@
 // 代码审查 API：手动流式审查（SSE）+ 触发异步 PR 审查。
+// trigger 返回只代表已入队；真正的 GitHub 结果由 worker 异步回写。
 import { parseSSEStream } from './sse';
+import { jsonRequest, requestJson } from './client';
 
 export interface ReviewCallbacks {
   onRules: (count: number) => void;
@@ -31,12 +33,10 @@ export async function triggerPrReview(
   repo: string,
   number: number,
 ): Promise<string> {
-  const resp = await fetch('/api/review/trigger', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ owner, repo, number }),
-  });
-  const data = await resp.json().catch(() => ({}));
-  if (!resp.ok) throw new Error(data.detail || `触发失败：HTTP ${resp.status}`);
+  const data = await requestJson<{ job_id?: string }>(
+    '/api/review/trigger',
+    jsonRequest('POST', { owner, repo, number }),
+    '触发失败',
+  );
   return data.job_id ?? '';
 }

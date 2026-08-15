@@ -1,0 +1,58 @@
+# 网络策略：先默认拒绝入站，再只允许 Ingress→frontend/webhook backend 与 frontend→backend。
+# 使用：确认 ingress controller namespace 后执行 kubectl apply -f deploy/k8s/networkpolicy.yaml。
+# 当前未限制出站；生产应按 DNS、托管数据服务及批准的 LLM/SaaS 端点设计 egress allowlist。
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: default-deny-ingress
+  namespace: devmind
+spec:
+  podSelector: {}
+  policyTypes: ["Ingress"]
+---
+# 如 ingress controller 不在 ingress-nginx namespace，请按实际安装位置调整。
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-ingress-to-frontend
+  namespace: devmind
+spec:
+  podSelector:
+    matchLabels:
+      app: devmind-frontend
+  policyTypes: ["Ingress"]
+  ingress:
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: ingress-nginx
+      ports:
+        - protocol: TCP
+          port: 8080
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-frontend-to-backend
+  namespace: devmind
+spec:
+  podSelector:
+    matchLabels:
+      app: devmind-backend
+  policyTypes: ["Ingress"]
+  ingress:
+    - from:
+        - podSelector:
+            matchLabels:
+              app: devmind-frontend
+      ports:
+        - protocol: TCP
+          port: 8000
+    # 独立 Webhook Ingress 直达后端；具体 namespace 按集群安装位置调整。
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: ingress-nginx
+      ports:
+        - protocol: TCP
+          port: 8000

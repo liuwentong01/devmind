@@ -1,8 +1,11 @@
-# DevMind 本地依赖编排（P0）
-# 仅起基础设施：PostgreSQL(pgvector) + Redis + Langfuse。
+# DevMind 本地依赖编排（禁止用于生产）
+# 仅起基础设施：PostgreSQL(pgvector) + Redis + Neo4j + 可选 Langfuse。
 # 后端 / 前端建议本地直接跑（热重载方便），后续阶段再容器化。
 #
 # 启动：docker compose -f deploy/docker-compose.yml up -d
+# 状态：docker compose -f deploy/docker-compose.yml ps
+# 停止但保留数据：docker compose -f deploy/docker-compose.yml down
+# 删除 volume 会丢失本地数据，只有明确要重建环境时才执行 down -v。
 
 services:
   postgres:
@@ -13,11 +16,11 @@ services:
       POSTGRES_PASSWORD: devmind
       POSTGRES_DB: devmind
     ports:
-      - "5432:5432"
+      - "127.0.0.1:5432:5432"
     volumes:
       - devmind_pg:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U devmind"]
+      test: ["CMD-SHELL", "pg_isready -U devmind -d devmind"]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -26,9 +29,14 @@ services:
     image: redis:7-alpine
     container_name: devmind-redis
     ports:
-      - "6379:6379"
+      - "127.0.0.1:6379:6379"
     volumes:
       - devmind_redis:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
 
   # ===== Neo4j 代码图谱（P5）=====
   neo4j:
@@ -38,8 +46,8 @@ services:
       NEO4J_AUTH: neo4j/devmind-neo4j
       NEO4J_PLUGINS: '["apoc"]'
     ports:
-      - "7474:7474"   # Browser UI
-      - "7687:7687"   # Bolt
+      - "127.0.0.1:7474:7474"   # Browser UI
+      - "127.0.0.1:7687:7687"   # Bolt
     volumes:
       - devmind_neo4j:/data
 
@@ -61,7 +69,7 @@ services:
     depends_on:
       - langfuse-db
     ports:
-      - "3000:3000"
+      - "127.0.0.1:3000:3000"
     environment:
       DATABASE_URL: postgresql://langfuse:langfuse@langfuse-db:5432/langfuse
       NEXTAUTH_URL: http://localhost:3000

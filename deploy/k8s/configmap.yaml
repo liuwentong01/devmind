@@ -1,19 +1,39 @@
-# 非敏感配置（敏感项放 Secret）
+# 非敏感运行配置。使用：修改域名/URL/代码根目录后执行 kubectl apply -f deploy/k8s/configmap.yaml。
+# Key、密码、token 和 Webhook URL 必须放 Secret；非本地 Settings 会对 TLS/Host/CORS fail closed。
 apiVersion: v1
 kind: ConfigMap
 metadata:
   name: devmind-config
   namespace: devmind
 data:
-  APP_ENV: "prod"
+  APP_ENV: "production"
   LOG_LEVEL: "INFO"
+  AUTH_ENABLED: "true"
+  ALLOW_UNSIGNED_WEBHOOKS: "false"
+  ALLOW_JIRA_DRY_RUN: "false"
+  EXPOSE_API_DOCS: "false"
+  REQUIRE_TLS_UPSTREAMS: "true"
+  TRUSTED_HOSTS: "devmind.example.com,devmind-webhooks.example.com"
   CORS_ORIGINS: "https://devmind.example.com"
+  # 必须按集群的实际反向代理/Pod CIDR 收窄；不要使用 *。
+  FORWARDED_ALLOW_IPS: "127.0.0.1"
+  MAX_REQUEST_BODY_BYTES: "10485760"
+  MAX_WEBHOOK_BODY_BYTES: "1048576"
   LLM_DEFAULT_MODEL: "deepseek/deepseek-chat"
   EMBEDDING_MODEL: "dashscope/text-embedding-v3"
   EMBEDDING_DIM: "1024"
-  DATABASE_URL: "postgresql+psycopg://devmind:devmind@postgres:5432/devmind"
-  REDIS_URL: "redis://redis:6379/0"
-  NEO4J_URI: "bolt://neo4j:7687"
+  # 生产默认只允许应用可校验的已知供应商。
+  ALLOW_UNVALIDATED_MODEL_PROVIDER: "false"
+  NEO4J_URI: "neo4j+s://neo4j.example.com:7687"
   NEO4J_USER: "neo4j"
+  # 目录会挂载到 API Pod；生产应替换为只读 PVC/CSI 代码卷。
+  CODE_INDEX_ALLOWED_ROOTS: "/workspace"
+  CODE_INDEX_MAX_TOTAL_BYTES: "67108864"
+  CODE_INDEX_MAX_FUNCTIONS: "50000"
+  CODE_INDEX_MAX_CALLS: "200000"
   RCA_MAX_ITERATIONS: "2"
   RCA_CONFIDENCE_THRESHOLD: "0.75"
+  COST_TRACKING_BACKEND: "redis"
+  COST_REDIS_KEY: "devmind:cost:v1"
+  # 启用 Langfuse 时必须改为企业 HTTPS 地址，并同时配置两项密钥。
+  LANGFUSE_HOST: ""

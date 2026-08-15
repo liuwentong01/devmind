@@ -1,3 +1,5 @@
+// P2 手动审查页面：粘贴 unified diff 后展示规则命中数和流式 Review。
+// 生产 GitHub Webhook 路径由后端 worker 执行，不依赖本页面保持打开。
 import { Alert, Button, Card, Input, Tag, Typography } from 'antd';
 import { CodeOutlined } from '@ant-design/icons';
 import { useAppDispatch, useAppSelector } from '../store/hooks';

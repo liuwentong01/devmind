@@ -1,3 +1,5 @@
+// P2 手动审查状态：保存 diff、命中的团队规则数量、流式 Review 与错误。
+// GitHub Webhook 的后台任务不在浏览器 Redux 中持久化。
 import { createSlice, type PayloadAction } from '@reduxjs/toolkit';
 
 interface ReviewState {

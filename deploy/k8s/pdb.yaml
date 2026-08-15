@@ -1,0 +1,35 @@
+# 三个 Deployment 的自愿中断预算：维护/节点排空时每类至少保留一个可用 Pod。
+# 使用：kubectl apply -f deploy/k8s/pdb.yaml && kubectl -n devmind get pdb
+# PDB 不处理节点突然故障，也不能替代多节点分散、健康探针或数据服务高可用。
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: devmind-backend
+  namespace: devmind
+spec:
+  minAvailable: 1
+  selector:
+    matchLabels:
+      app: devmind-backend
+---
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: devmind-frontend
+  namespace: devmind
+spec:
+  minAvailable: 1
+  selector:
+    matchLabels:
+      app: devmind-frontend
+---
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: devmind-worker
+  namespace: devmind
+spec:
+  minAvailable: 1
+  selector:
+    matchLabels:
+      app: devmind-worker

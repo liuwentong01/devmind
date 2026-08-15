@@ -1,3 +1,4 @@
+# 排除本地/开发制品以缩小后端构建上下文；虚拟环境、真实 .env 和 Git 历史不进入镜像层。
 .venv
 venv
 __pycache__
@@ -5,4 +6,9 @@ __pycache__
 .pytest_cache
 .ruff_cache
 .env
+.env.*
+!.env.example
 tests
+.git
+.gitignore
+README.md

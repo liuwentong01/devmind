@@ -1,14 +1,31 @@
-# 入口：前端走 nginx（其内部反代 /api 到后端）
+# 两个独立入口：主站经 OAuth2/OIDC 到 frontend；机器 Webhook 精确路径直达 backend。
+# 使用前必须替换域名、TLS Secret、auth-url/signin，并在真实 ingress-nginx 上验证 SSE 超时。
+# 应用层仍会校验普通服务 Key、GitHub HMAC 与 Alert Bearer；Ingress 不替代这些认证。
 apiVersion: networking.k8s.io/v1
 kind: Ingress
 metadata:
   name: devmind-ingress
   namespace: devmind
   annotations:
+    # Fail closed：必须先部署并按实际环境替换 OAuth2 Proxy/OIDC 地址。
+    # auth-url 不可达时 ingress-nginx 会拒绝请求，不会匿名放行。
+    nginx.ingress.kubernetes.io/auth-url: "http://oauth2-proxy.oauth2-proxy.svc.cluster.local/oauth2/auth"
+    nginx.ingress.kubernetes.io/auth-signin: "https://auth.example.com/oauth2/start?rd=$escaped_request_uri"
+    nginx.ingress.kubernetes.io/auth-response-headers: "X-Auth-Request-User,X-Auth-Request-Email"
     nginx.ingress.kubernetes.io/proxy-buffering: "off"   # SSE 流式
     nginx.ingress.kubernetes.io/proxy-read-timeout: "600"
+    nginx.ingress.kubernetes.io/proxy-body-size: "10m"
+    nginx.ingress.kubernetes.io/ssl-redirect: "true"
+    # 每个来源 IP 的基础保护；企业 NAT、SSE 并发量与 controller 副本数会影响实际值。
+    nginx.ingress.kubernetes.io/limit-connections: "100"
+    nginx.ingress.kubernetes.io/limit-rps: "20"
+    nginx.ingress.kubernetes.io/limit-burst-multiplier: "5"
 spec:
   ingressClassName: nginx
+  tls:
+    - hosts:
+        - devmind.example.com
+      secretName: devmind-tls
   rules:
     - host: devmind.example.com
       http:
@@ -20,3 +37,41 @@ spec:
                 name: devmind-frontend
                 port:
                   number: 80
+---
+# Webhook 使用独立域名和精确路径，避免与 UI 的交互式 OIDC 规则冲突。
+# GitHub HMAC 与 Alertmanager Bearer secret 仍由应用层强制校验。
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: devmind-webhooks
+  namespace: devmind
+  annotations:
+    nginx.ingress.kubernetes.io/proxy-body-size: "1m"
+    nginx.ingress.kubernetes.io/ssl-redirect: "true"
+    nginx.ingress.kubernetes.io/limit-connections: "20"
+    nginx.ingress.kubernetes.io/limit-rps: "5"
+    nginx.ingress.kubernetes.io/limit-burst-multiplier: "2"
+spec:
+  ingressClassName: nginx
+  tls:
+    - hosts:
+        - devmind-webhooks.example.com
+      secretName: devmind-webhooks-tls
+  rules:
+    - host: devmind-webhooks.example.com
+      http:
+        paths:
+          - path: /api/webhooks/github
+            pathType: Exact
+            backend:
+              service:
+                name: devmind-backend
+                port:
+                  number: 8000
+          - path: /api/webhooks/alert
+            pathType: Exact
+            backend:
+              service:
+                name: devmind-backend
+                port:
+                  number: 8000

@@ -1,4 +1,6 @@
-# 前端：Deployment + Service（nginx 托管 + 反代 /api 到后端）
+# 前端：非 root nginx Deployment + Service；托管 SPA 并把 /api 同源代理到 backend。
+# 使用：kubectl apply -f deploy/k8s/frontend.yaml；运行时 Key 从 devmind-secret 注入，不进入 JS。
+# 主站必须放在 ingress.yaml 的 OIDC/TLS 入口之后，服务 Key 不能代表最终用户身份。
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -6,6 +8,13 @@ metadata:
   namespace: devmind
 spec:
   replicas: 2
+  revisionHistoryLimit: 5
+  minReadySeconds: 10
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxUnavailable: 0
+      maxSurge: 1
   selector:
     matchLabels:
       app: devmind-frontend
@@ -14,11 +23,70 @@ spec:
       labels:
         app: devmind-frontend
     spec:
+      serviceAccountName: devmind
+      automountServiceAccountToken: false
+      terminationGracePeriodSeconds: 30
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 101
+        runAsGroup: 101
+        fsGroup: 101
+        seccompProfile:
+          type: RuntimeDefault
+      topologySpreadConstraints:
+        - maxSkew: 1
+          topologyKey: kubernetes.io/hostname
+          whenUnsatisfiable: ScheduleAnyway
+          labelSelector:
+            matchLabels:
+              app: devmind-frontend
       containers:
         - name: web
-          image: devmind/frontend:latest
+          image: ghcr.io/your-org/devmind-frontend:0.1.0
+          imagePullPolicy: IfNotPresent
           ports:
-            - containerPort: 80
+            - name: http
+              containerPort: 8080
+          env:
+            - name: DEVMIND_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: devmind-secret
+                  key: DEVMIND_FRONTEND_API_KEY
+            - name: NGINX_ENVSUBST_FILTER
+              value: "^DEVMIND_API_KEY$"
+          startupProbe:
+            httpGet:
+              path: /healthz
+              port: http
+            periodSeconds: 3
+            failureThreshold: 20
+          readinessProbe:
+            httpGet:
+              path: /healthz
+              port: http
+            periodSeconds: 10
+            timeoutSeconds: 2
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: http
+            periodSeconds: 20
+            timeoutSeconds: 2
+          lifecycle:
+            preStop:
+              exec:
+                command: ["/bin/sh", "-c", "sleep 5"]
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ["ALL"]
+          volumeMounts:
+            - name: tmp
+              mountPath: /tmp
+            - name: nginx-conf
+              mountPath: /etc/nginx/conf.d
           resources:
             requests:
               cpu: "50m"
@@ -26,6 +94,13 @@ spec:
             limits:
               cpu: "250m"
               memory: "128Mi"
+      volumes:
+        - name: tmp
+          emptyDir:
+            sizeLimit: 64Mi
+        - name: nginx-conf
+          emptyDir:
+            sizeLimit: 1Mi
 ---
 apiVersion: v1
 kind: Service
@@ -36,5 +111,6 @@ spec:
   selector:
     app: devmind-frontend
   ports:
-    - port: 80
-      targetPort: 80
+    - name: http
+      port: 80
+      targetPort: http

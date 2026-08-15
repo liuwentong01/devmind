@@ -1,5 +1,7 @@
+// P6 本地成本面板：TanStack Query 定时读取快照，并通过 mutation 执行 reset。
+// App.tsx 仅在 DEV 构建暴露本页；生产管理仍必须走独立、受审计的 admin 通道。
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { Button, Card, Space, Statistic, Table, Tag, Typography } from 'antd';
+import { Alert, Button, Card, Space, Statistic, Table, Tag, Typography } from 'antd';
 import { ReloadOutlined } from '@ant-design/icons';
 import { fetchCost, resetCost, type ModelUsage } from '../api/cost';
 
@@ -51,6 +53,32 @@ export default function CostPage() {
           </Button>
         }
       >
+        {data?.degraded && (
+          <Alert
+            type="warning"
+            showIcon
+            style={{ marginBottom: 16 }}
+            message="成本统计已降级为单实例内存存储"
+            description="Redis 暂不可用；当前数据不会跨 API/worker 副本聚合，恢复 Redis 后请复核成本报表。"
+          />
+        )}
+        {data?.storage === 'disabled' && (
+          <Alert
+            type="info"
+            showIcon
+            style={{ marginBottom: 16 }}
+            message="成本统计已关闭"
+          />
+        )}
+        {resetMutation.isError && (
+          <Alert
+            type="error"
+            showIcon
+            style={{ marginBottom: 16 }}
+            message="重置失败"
+            description={(resetMutation.error as Error).message}
+          />
+        )}
         {isError ? (
           <Text type="danger">{(error as Error).message}</Text>
         ) : (
@@ -76,7 +104,7 @@ export default function CostPage() {
               locale={{ emptyText: '暂无调用记录，先去各 Agent 页面跑几次' }}
             />
             <Text type="secondary" style={{ display: 'block', marginTop: 12 }}>
-              注：国内模型 LiteLLM 多无内置定价，费用可能显示 $0，但 token 用量正常统计。每 5 秒自动刷新。
+              注：未收录在锁定价格表中的模型可能显示 $0，token 仍会统计；正式结算以供应商账单为准。每 5 秒自动刷新。
             </Text>
           </>
         )}

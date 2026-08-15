@@ -1,3 +1,5 @@
+// P1 页面：管理文档入库/删除，并消费带 sources 的 RAG SSE 问答。
+// “团队代码审查规范”来源会写为 review-rule，供 P2 隔离检索。
 import { useCallback, useEffect, useState } from 'react';
 import {
   Button,
@@ -6,6 +8,7 @@ import {
   Input,
   List,
   Popconfirm,
+  Select,
   Space,
   Tag,
   Typography,
@@ -39,6 +42,7 @@ export default function KnowledgePage() {
 
   const [title, setTitle] = useState('');
   const [content, setContent] = useState('');
+  const [source, setSource] = useState('manual');
   const [question, setQuestion] = useState('');
   const [submitting, setSubmitting] = useState(false);
 
@@ -64,7 +68,7 @@ export default function KnowledgePage() {
     }
     setSubmitting(true);
     try {
-      await ingestDocument(title.trim(), content.trim());
+      await ingestDocument(title.trim(), content.trim(), source);
       message.success('入库成功');
       setTitle('');
       setContent('');
@@ -107,6 +111,15 @@ export default function KnowledgePage() {
             value={title}
             onChange={(e) => setTitle(e.target.value)}
           />
+          <Select
+            aria-label="文档用途"
+            value={source}
+            onChange={setSource}
+            options={[
+              { value: 'manual', label: '普通知识文档' },
+              { value: 'review-rule', label: '团队代码审查规范' },
+            ]}
+          />
           <Input.TextArea
             placeholder="粘贴文档正文，入库时会自动分块并向量化"
             value={content}
@@ -137,7 +150,14 @@ export default function KnowledgePage() {
             >
               <List.Item.Meta
                 title={doc.title}
-                description={<Tag color="blue">{doc.chunk_count} 切片</Tag>}
+                description={
+                  <Space size={4} wrap>
+                    <Tag color={doc.source === 'review-rule' ? 'purple' : 'default'}>
+                      {doc.source === 'review-rule' ? '审查规范' : doc.source}
+                    </Tag>
+                    <Tag color="blue">{doc.chunk_count} 切片</Tag>
+                  </Space>
+                }
               />
             </List.Item>
           )}
