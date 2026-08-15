@@ -33,7 +33,8 @@ async def create_document(
         doc = await ingest_document(session, req.title, req.content, req.source)
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
-    return IngestResponse(id=doc.id, title=doc.title, chunk_count=len(doc.chunks))
+    chunk_count = await session.scalar(select(func.count(Chunk.id)).where(Chunk.document_id == doc.id))
+    return IngestResponse(id=doc.id, title=doc.title, chunk_count=chunk_count or 0)
 
 
 @router.get("/documents", response_model=list[DocumentOut])

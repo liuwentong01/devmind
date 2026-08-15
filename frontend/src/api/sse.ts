@@ -8,7 +8,8 @@ interface SSEEvent {
 /** 按「空行」把缓冲区切成一个个 SSE 事件，返回事件列表与剩余不完整片段 */
 function parseChunk(buffer: string): { events: SSEEvent[]; rest: string } {
   const events: SSEEvent[] = [];
-  const blocks = buffer.split('\n\n');
+  const normalized = buffer.replace(/\r\n/g, '\n');
+  const blocks = normalized.split('\n\n');
   const rest = blocks.pop() ?? '';
 
   for (const block of blocks) {
